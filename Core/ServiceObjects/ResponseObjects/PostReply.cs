@@ -28,6 +28,7 @@ namespace Microsoft.Exchange.WebServices.Data
     using System;
     using System.Collections.Generic;
     using System.Text;
+    using System.Threading.Tasks;
 
     /// <summary>
     /// Represents a reply to a post item.
@@ -117,6 +118,30 @@ namespace Microsoft.Exchange.WebServices.Data
             DeleteMode deleteMode,
             SendCancellationsMode? sendCancellationsMode,
             AffectedTaskOccurrence? affectedTaskOccurrences)
+        {
+            throw new InvalidOperationException(Strings.DeletingThisObjectTypeNotAuthorized);
+        }
+
+        /// <summary>
+        /// Loads async the specified set of properties on the object.
+        /// </summary>
+        /// <param name="propertySet">The properties to load.</param>
+        /// <returns></returns>
+        /// <exception cref="System.InvalidOperationException"></exception>
+        internal override System.Threading.Tasks.Task InternalLoadAsync(PropertySet propertySet)
+        {
+            throw new InvalidOperationException(Strings.LoadingThisObjectTypeNotSupported);
+        }
+
+        /// <summary>
+        /// Deletes async the object.
+        /// </summary>
+        /// <param name="deleteMode">The deletion mode.</param>
+        /// <param name="sendCancellationsMode">Indicates whether meeting cancellation messages should be sent.</param>
+        /// <param name="affectedTaskOccurrences">Indicate which occurrence of a recurring task should be deleted.</param>
+        /// <returns></returns>
+        /// <exception cref="System.InvalidOperationException"></exception>
+        internal override System.Threading.Tasks.Task InternalDeleteAsync(DeleteMode deleteMode, SendCancellationsMode? sendCancellationsMode, AffectedTaskOccurrence? affectedTaskOccurrences)
         {
             throw new InvalidOperationException(Strings.DeletingThisObjectTypeNotAuthorized);
         }

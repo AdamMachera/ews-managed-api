@@ -75,12 +75,35 @@ namespace Microsoft.Exchange.WebServices.Data
         }
 
         /// <summary>
+        /// Loads the specified set of properties on the object.
+        /// </summary>
+        /// <param name="propertySet">The properties to load.</param>
+        internal override async System.Threading.Tasks.Task InternalLoadAsync(PropertySet propertySet)
+        {
+            throw new NotSupportedException();
+        }
+
+        /// <summary>
         /// Deletes the object.
         /// </summary>
         /// <param name="deleteMode">The deletion mode.</param>
         /// <param name="sendCancellationsMode">Indicates whether meeting cancellation messages should be sent.</param>
         /// <param name="affectedTaskOccurrences">Indicate which occurrence of a recurring task should be deleted.</param>
         internal override void InternalDelete(
+            DeleteMode deleteMode,
+            SendCancellationsMode? sendCancellationsMode,
+            AffectedTaskOccurrence? affectedTaskOccurrences)
+        {
+            throw new NotSupportedException();
+        }
+
+        /// <summary>
+        /// Deletes the object.
+        /// </summary>
+        /// <param name="deleteMode">The deletion mode.</param>
+        /// <param name="sendCancellationsMode">Indicates whether meeting cancellation messages should be sent.</param>
+        /// <param name="affectedTaskOccurrences">Indicate which occurrence of a recurring task should be deleted.</param>
+        internal override async System.Threading.Tasks.Task InternalDeleteAsync(
             DeleteMode deleteMode,
             SendCancellationsMode? sendCancellationsMode,
             AffectedTaskOccurrence? affectedTaskOccurrences)

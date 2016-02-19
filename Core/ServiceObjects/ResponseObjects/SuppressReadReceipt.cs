@@ -28,6 +28,7 @@ namespace Microsoft.Exchange.WebServices.Data
     using System;
     using System.Collections.Generic;
     using System.Text;
+    using System.Threading.Tasks;
 
     /// <summary>
     /// Represents a response object created to supress read receipts for an item.
@@ -95,6 +96,31 @@ namespace Microsoft.Exchange.WebServices.Data
             throw new NotSupportedException();
         }
 
+
+        /// <summary>
+        /// Loads async the specified set of properties on the object.
+        /// </summary>
+        /// <param name="propertySet">The properties to load.</param>
+        /// <returns></returns>
+        /// <exception cref="System.NotImplementedException"></exception>
+        internal override System.Threading.Tasks.Task InternalLoadAsync(PropertySet propertySet)
+        {
+            throw new NotImplementedException();
+        }
+
+        /// <summary>
+        /// Deletes async the object.
+        /// </summary>
+        /// <param name="deleteMode">The deletion mode.</param>
+        /// <param name="sendCancellationsMode">Indicates whether meeting cancellation messages should be sent.</param>
+        /// <param name="affectedTaskOccurrences">Indicate which occurrence of a recurring task should be deleted.</param>
+        /// <returns></returns>
+        /// <exception cref="System.NotImplementedException"></exception>
+        internal override System.Threading.Tasks.Task InternalDeleteAsync(DeleteMode deleteMode, SendCancellationsMode? sendCancellationsMode, AffectedTaskOccurrence? affectedTaskOccurrences)
+        {
+            throw new NotImplementedException();
+        }
+
         /// <summary>
         /// Create the response object.
         /// </summary>
@@ -109,5 +135,21 @@ namespace Microsoft.Exchange.WebServices.Data
                 parentFolderId,
                 messageDisposition);
         }
+        
+        /// <summary>
+        /// Create the response object.
+        /// </summary>
+        /// <param name="parentFolderId">The parent folder id.</param>
+        /// <param name="messageDisposition">The message disposition.</param>
+        internal async System.Threading.Tasks.Task InternalCreateAsync(FolderId parentFolderId, MessageDisposition? messageDisposition)
+        {
+            ((ItemId)this.PropertyBag[ResponseObjectSchema.ReferenceItemId]).Assign(this.referenceItem.Id);
+
+            await this.Service.InternalCreateResponseObjectAsync(
+                this,
+                parentFolderId,
+                messageDisposition);
+        }
+
     }
 }

@@ -57,6 +57,16 @@ namespace Microsoft.Exchange.WebServices.Data
             return this.ReadResponse(response);
         }
 
+        internal async System.Threading.Tasks.Task<T> InternalExecuteAsync<T>()
+        {
+            var result = await System.Threading.Tasks.Task.Factory.FromAsync<T>(this.BeginExecute, (asyncResult) =>
+            {
+                return (T)this.EndInternalExecute(asyncResult);
+            }, this);
+
+            return result;
+        }
+
         /// <summary>
         /// Ends executing this async request.
         /// </summary>

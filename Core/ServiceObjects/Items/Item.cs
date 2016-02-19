@@ -79,6 +79,22 @@ namespace Microsoft.Exchange.WebServices.Data
         }
 
         /// <summary>
+        /// Binds to an existing item, whatever its actual type is, and loads the specified set of properties.
+        /// Calling this method results in a call to EWS.
+        /// </summary>
+        /// <param name="service">The service to use to bind to the item.</param>
+        /// <param name="id">The Id of the item to bind to.</param>
+        /// <param name="propertySet">The set of properties to load.</param>
+        /// <returns>An Item instance representing the item corresponding to the specified Id.</returns>
+        public static async System.Threading.Tasks.Task<Item> BindAsync(
+            ExchangeService service,
+            ItemId id,
+            PropertySet propertySet)
+        {
+            return await service.BindToItemAsync<Item>(id, propertySet);
+        }
+
+        /// <summary>
         /// Binds to an existing item, whatever its actual type is, and loads its first class properties.
         /// Calling this method results in a call to EWS.
         /// </summary>
@@ -88,6 +104,21 @@ namespace Microsoft.Exchange.WebServices.Data
         public static Item Bind(ExchangeService service, ItemId id)
         {
             return Item.Bind(
+                service,
+                id,
+                PropertySet.FirstClassProperties);
+        }
+
+        /// <summary>
+        /// Binds to an existing item, whatever its actual type is, and loads its first class properties.
+        /// Calling this method results in a call to EWS.
+        /// </summary>
+        /// <param name="service">The service to use to bind to the item.</param>
+        /// <param name="id">The Id of the item to bind to.</param>
+        /// <returns>An Item instance representing the item corresponding to the specified Id.</returns>
+        public static async System.Threading.Tasks.Task<Item> BindAsync(ExchangeService service, ItemId id)
+        {
+            return await Item.BindAsync(
                 service,
                 id,
                 PropertySet.FirstClassProperties);
@@ -147,6 +178,21 @@ namespace Microsoft.Exchange.WebServices.Data
         }
 
         /// <summary>
+        /// Loads the specified set of properties on the object.
+        /// </summary>
+        /// <param name="propertySet">The properties to load.</param>
+        internal override async System.Threading.Tasks.Task InternalLoadAsync(PropertySet propertySet)
+        {
+            this.ThrowIfThisIsNew();
+            this.ThrowIfThisIsAttachment();
+
+            await this.Service.InternalLoadPropertiesForItemsAsync(
+                new Item[] { this },
+                propertySet,
+                ServiceErrorHandling.ThrowOnError);
+        }
+
+        /// <summary>
         /// Deletes the object.
         /// </summary>
         /// <param name="deleteMode">The deletion mode.</param>
@@ -159,6 +205,21 @@ namespace Microsoft.Exchange.WebServices.Data
         {
             this.InternalDelete(deleteMode, sendCancellationsMode, affectedTaskOccurrences, false);
         }
+
+        /// <summary>
+        /// Deletes the object.
+        /// </summary>
+        /// <param name="deleteMode">The deletion mode.</param>
+        /// <param name="sendCancellationsMode">Indicates whether meeting cancellation messages should be sent.</param>
+        /// <param name="affectedTaskOccurrences">Indicate which occurrence of a recurring task should be deleted.</param>
+        internal override async System.Threading.Tasks.Task InternalDeleteAsync(
+            DeleteMode deleteMode,
+            SendCancellationsMode? sendCancellationsMode,
+            AffectedTaskOccurrence? affectedTaskOccurrences)
+        {
+            await this.InternalDeleteAsync(deleteMode, sendCancellationsMode, affectedTaskOccurrences, false);
+        }
+
 
         /// <summary>
         /// Deletes the object.
@@ -197,6 +258,42 @@ namespace Microsoft.Exchange.WebServices.Data
         }
 
         /// <summary>
+        /// Deletes the object.
+        /// </summary>
+        /// <param name="deleteMode">The deletion mode.</param>
+        /// <param name="sendCancellationsMode">Indicates whether meeting cancellation messages should be sent.</param>
+        /// <param name="affectedTaskOccurrences">Indicate which occurrence of a recurring task should be deleted.</param>
+        /// <param name="suppressReadReceipts">Whether to suppress read receipts</param>
+        internal async System.Threading.Tasks.Task InternalDeleteAsync(
+            DeleteMode deleteMode,
+            SendCancellationsMode? sendCancellationsMode,
+            AffectedTaskOccurrence? affectedTaskOccurrences,
+            bool suppressReadReceipts)
+        {
+            this.ThrowIfThisIsNew();
+            this.ThrowIfThisIsAttachment();
+
+            // If sendCancellationsMode is null, use the default value that's appropriate for item type.
+            if (!sendCancellationsMode.HasValue)
+            {
+                sendCancellationsMode = this.DefaultSendCancellationsMode;
+            }
+
+            // If affectedTaskOccurrences is null, use the default value that's appropriate for item type.
+            if (!affectedTaskOccurrences.HasValue)
+            {
+                affectedTaskOccurrences = this.DefaultAffectedTaskOccurrences;
+            }
+
+            await this.Service.DeleteItemAsync(
+                this.Id,
+                deleteMode,
+                sendCancellationsMode,
+                affectedTaskOccurrences,
+                suppressReadReceipts);
+        }
+
+        /// <summary>
         /// Create item.
         /// </summary>
         /// <param name="parentFolderId">The parent folder id.</param>
@@ -223,6 +320,32 @@ namespace Microsoft.Exchange.WebServices.Data
         }
 
         /// <summary>
+        /// Create item.
+        /// </summary>
+        /// <param name="parentFolderId">The parent folder id.</param>
+        /// <param name="messageDisposition">The message disposition.</param>
+        /// <param name="sendInvitationsMode">The send invitations mode.</param>
+        internal async System.Threading.Tasks.Task InternalCreateAsync(
+            FolderId parentFolderId,
+            MessageDisposition? messageDisposition,
+            SendInvitationsMode? sendInvitationsMode)
+        {
+            this.ThrowIfThisIsNotNew();
+            this.ThrowIfThisIsAttachment();
+
+            if (this.IsNew || this.IsDirty)
+            {
+                await this.Service.CreateItemAsync(
+                    this,
+                    parentFolderId,
+                    messageDisposition,
+                    sendInvitationsMode.HasValue ? sendInvitationsMode : this.DefaultSendInvitationsMode);
+
+                await this.Attachments.SaveAsync();
+            }
+        }
+
+        /// <summary>
         /// Update item.
         /// </summary>
         /// <param name="parentFolderId">The parent folder id.</param>
@@ -237,6 +360,23 @@ namespace Microsoft.Exchange.WebServices.Data
             SendInvitationsOrCancellationsMode? sendInvitationsOrCancellationsMode)
         {
             return this.InternalUpdate(parentFolderId, conflictResolutionMode, messageDisposition, sendInvitationsOrCancellationsMode, false);
+        }
+
+        /// <summary>
+        /// Update item.
+        /// </summary>
+        /// <param name="parentFolderId">The parent folder id.</param>
+        /// <param name="conflictResolutionMode">The conflict resolution mode.</param>
+        /// <param name="messageDisposition">The message disposition.</param>
+        /// <param name="sendInvitationsOrCancellationsMode">The send invitations or cancellations mode.</param>
+        /// <returns>Updated item.</returns>
+        internal async System.Threading.Tasks.Task<Item> InternalUpdateAsync(
+            FolderId parentFolderId,
+            ConflictResolutionMode conflictResolutionMode,
+            MessageDisposition? messageDisposition,
+            SendInvitationsOrCancellationsMode? sendInvitationsOrCancellationsMode)
+        {
+            return await this.InternalUpdateAsync(parentFolderId, conflictResolutionMode, messageDisposition, sendInvitationsOrCancellationsMode, false);
         }
 
         /// <summary>
@@ -283,6 +423,50 @@ namespace Microsoft.Exchange.WebServices.Data
         }
 
         /// <summary>
+        /// Update item.
+        /// </summary>
+        /// <param name="parentFolderId">The parent folder id.</param>
+        /// <param name="conflictResolutionMode">The conflict resolution mode.</param>
+        /// <param name="messageDisposition">The message disposition.</param>
+        /// <param name="sendInvitationsOrCancellationsMode">The send invitations or cancellations mode.</param>
+        /// <param name="suppressReadReceipts">Whether to suppress read receipts</param>
+        /// <returns>Updated item.</returns>
+        internal async System.Threading.Tasks.Task<Item> InternalUpdateAsync(
+            FolderId parentFolderId,
+            ConflictResolutionMode conflictResolutionMode,
+            MessageDisposition? messageDisposition,
+            SendInvitationsOrCancellationsMode? sendInvitationsOrCancellationsMode,
+            bool suppressReadReceipts)
+        {
+            this.ThrowIfThisIsNew();
+            this.ThrowIfThisIsAttachment();
+
+            Item returnedItem = null;
+
+            if (this.IsDirty && this.PropertyBag.GetIsUpdateCallNecessary())
+            {
+                returnedItem = await this.Service.UpdateItemAsync(
+                    this,
+                    parentFolderId,
+                    conflictResolutionMode,
+                    messageDisposition,
+                    sendInvitationsOrCancellationsMode.HasValue ? sendInvitationsOrCancellationsMode : this.DefaultSendInvitationsOrCancellationsMode,
+                    suppressReadReceipts);
+            }
+
+            // Regardless of whether item is dirty or not, if it has unprocessed
+            // attachment changes, validate them and process now.
+            if (this.HasUnprocessedAttachmentChanges())
+            {
+                this.Attachments.Validate();
+                await this.Attachments.SaveAsync();
+            }
+
+            return returnedItem;
+        }
+
+
+        /// <summary>
         /// Gets a value indicating whether this instance has unprocessed attachment collection changes.
         /// </summary>
         internal bool HasUnprocessedAttachmentChanges()
@@ -326,6 +510,15 @@ namespace Microsoft.Exchange.WebServices.Data
         }
 
         /// <summary>
+        /// Deletes async the item. Calling this method results in a call to EWS.
+        /// </summary>
+        /// <param name="deleteMode">The deletion mode.</param>
+        public async System.Threading.Tasks.Task DeleteAsync(DeleteMode deleteMode)
+        {
+            await this.DeleteAsync(deleteMode, false);
+        }
+
+        /// <summary>
         /// Deletes the item. Calling this method results in a call to EWS.
         /// </summary>
         /// <param name="deleteMode">The deletion mode.</param>
@@ -333,6 +526,16 @@ namespace Microsoft.Exchange.WebServices.Data
         public void Delete(DeleteMode deleteMode, bool suppressReadReceipts)
         {
             this.InternalDelete(deleteMode, null, null, suppressReadReceipts);
+        }
+
+        /// <summary>
+        /// Deletes async the item. Calling this method results in a call to EWS.
+        /// </summary>
+        /// <param name="deleteMode">The deletion mode.</param>
+        /// <param name="suppressReadReceipts">Whether to suppress read receipts</param>
+        public async System.Threading.Tasks.Task DeleteAsync(DeleteMode deleteMode, bool suppressReadReceipts)
+        {
+            await this.InternalDeleteAsync(deleteMode, null, null, suppressReadReceipts);
         }
 
         /// <summary>
@@ -354,10 +557,38 @@ namespace Microsoft.Exchange.WebServices.Data
         /// Saves this item in a specific folder. Calling this method results in at least one call to EWS.
         /// Mutliple calls to EWS might be made if attachments have been added.
         /// </summary>
+        /// <param name="parentFolderId">The Id of the folder in which to save this item.</param>
+        public async System.Threading.Tasks.Task SaveAsync(FolderId parentFolderId)
+        {
+            EwsUtilities.ValidateParam(parentFolderId, "parentFolderId");
+
+            await this.InternalCreateAsync(
+                parentFolderId,
+                MessageDisposition.SaveOnly,
+                null);
+        }
+
+        /// <summary>
+        /// Saves this item in a specific folder. Calling this method results in at least one call to EWS.
+        /// Mutliple calls to EWS might be made if attachments have been added.
+        /// </summary>
         /// <param name="parentFolderName">The name of the folder in which to save this item.</param>
         public void Save(WellKnownFolderName parentFolderName)
         {
             this.InternalCreate(
+                new FolderId(parentFolderName),
+                MessageDisposition.SaveOnly,
+                null);
+        }
+
+        /// <summary>
+        /// Saves this item in a specific folder. Calling this method results in at least one call to EWS.
+        /// Mutliple calls to EWS might be made if attachments have been added.
+        /// </summary>
+        /// <param name="parentFolderName">The name of the folder in which to save this item.</param>
+        public async System.Threading.Tasks.Task SaveAsync(WellKnownFolderName parentFolderName)
+        {
+            await this.InternalCreateAsync(
                 new FolderId(parentFolderName),
                 MessageDisposition.SaveOnly,
                 null);
@@ -376,6 +607,18 @@ namespace Microsoft.Exchange.WebServices.Data
         }
 
         /// <summary>
+        /// Saves this item in the default folder based on the item's type (for example, an e-mail message is saved to the Drafts folder).
+        /// Calling this method results in at least one call to EWS. Mutliple calls to EWS might be made if attachments have been added.
+        /// </summary>
+        public async System.Threading.Tasks.Task SaveAsync()
+        {
+            await this.InternalCreateAsync(
+                null,
+                MessageDisposition.SaveOnly,
+                null);
+        }
+
+        /// <summary>
         /// Applies the local changes that have been made to this item. Calling this method results in at least one call to EWS.
         /// Mutliple calls to EWS might be made if attachments have been added or removed.
         /// </summary>
@@ -383,6 +626,17 @@ namespace Microsoft.Exchange.WebServices.Data
         public void Update(ConflictResolutionMode conflictResolutionMode)
         {
             this.Update(conflictResolutionMode, false);
+        }
+
+
+        /// <summary>
+        /// Applies the local changes that have been made to this item. Calling this method results in at least one call to EWS.
+        /// Mutliple calls to EWS might be made if attachments have been added or removed.
+        /// </summary>
+        /// <param name="conflictResolutionMode">The conflict resolution mode.</param>
+        public async System.Threading.Tasks.Task UpdateAsync(ConflictResolutionMode conflictResolutionMode)
+        {
+            await this.UpdateAsync(conflictResolutionMode, false);
         }
 
         /// <summary>
@@ -394,6 +648,22 @@ namespace Microsoft.Exchange.WebServices.Data
         public void Update(ConflictResolutionMode conflictResolutionMode, bool suppressReadReceipts)
         {
             this.InternalUpdate(
+                null /* parentFolder */,
+                conflictResolutionMode,
+                MessageDisposition.SaveOnly,
+                null,
+                suppressReadReceipts);
+        }
+
+        /// <summary>
+        /// Applies the local changes that have been made to this item. Calling this method results in at least one call to EWS.
+        /// Mutliple calls to EWS might be made if attachments have been added or removed.
+        /// </summary>
+        /// <param name="conflictResolutionMode">The conflict resolution mode.</param>
+        /// <param name="suppressReadReceipts">Whether to suppress read receipts</param>
+        public async System.Threading.Tasks.Task UpdateAsync(ConflictResolutionMode conflictResolutionMode, bool suppressReadReceipts)
+        {
+            await this.InternalUpdateAsync(
                 null /* parentFolder */,
                 conflictResolutionMode,
                 MessageDisposition.SaveOnly,
@@ -427,11 +697,44 @@ namespace Microsoft.Exchange.WebServices.Data
         /// public folder.
         /// </para>
         /// </summary>
+        /// <param name="destinationFolderId">The Id of the folder in which to create a copy of this item.</param>
+        /// <returns>The copy of this item.</returns>
+        public async System.Threading.Tasks.Task<Item> CopyAsync(FolderId destinationFolderId)
+        {
+            this.ThrowIfThisIsNew();
+            this.ThrowIfThisIsAttachment();
+
+            EwsUtilities.ValidateParam(destinationFolderId, "destinationFolderId");
+
+            return await this.Service.CopyItemAsync(this.Id, destinationFolderId);
+        }
+
+        /// <summary>
+        /// Creates a copy of this item in the specified folder. Calling this method results in a call to EWS.
+        /// <para>
+        /// Copy returns null if the copy operation is across two mailboxes or between a mailbox and a
+        /// public folder.
+        /// </para>
+        /// </summary>
         /// <param name="destinationFolderName">The name of the folder in which to create a copy of this item.</param>
         /// <returns>The copy of this item.</returns>
         public Item Copy(WellKnownFolderName destinationFolderName)
         {
             return this.Copy(new FolderId(destinationFolderName));
+        }
+
+        /// <summary>
+        /// Creates async a copy of this item in the specified folder. Calling this method results in a call to EWS.
+        /// <para>
+        /// Copy returns null if the copy operation is across two mailboxes or between a mailbox and a
+        /// public folder.
+        /// </para>
+        /// </summary>
+        /// <param name="destinationFolderName">The name of the folder in which to create a copy of this item.</param>
+        /// <returns>The copy of this item.</returns>
+        public async System.Threading.Tasks.Task<Item> CopyAsync(WellKnownFolderName destinationFolderName)
+        {
+            return await this.CopyAsync(new FolderId(destinationFolderName));
         }
 
         /// <summary>
@@ -460,11 +763,44 @@ namespace Microsoft.Exchange.WebServices.Data
         /// public folder.
         /// </para>
         /// </summary>
+        /// <param name="destinationFolderId">The Id of the folder to which to move this item.</param>
+        /// <returns>The moved copy of this item.</returns>
+        public async System.Threading.Tasks.Task<Item> MoveAsync(FolderId destinationFolderId)
+        {
+            this.ThrowIfThisIsNew();
+            this.ThrowIfThisIsAttachment();
+
+            EwsUtilities.ValidateParam(destinationFolderId, "destinationFolderId");
+
+            return await this.Service.MoveItemAsync(this.Id, destinationFolderId);
+        }
+
+        /// <summary>
+        /// Moves this item to a the specified folder. Calling this method results in a call to EWS.
+        /// <para>
+        /// Move returns null if the move operation is across two mailboxes or between a mailbox and a
+        /// public folder.
+        /// </para>
+        /// </summary>
         /// <param name="destinationFolderName">The name of the folder to which to move this item.</param>
         /// <returns>The moved copy of this item.</returns>
         public Item Move(WellKnownFolderName destinationFolderName)
         {
             return this.Move(new FolderId(destinationFolderName));
+        }
+
+        /// <summary>
+        /// Moves this item to a the specified folder. Calling this method results in a call to EWS.
+        /// <para>
+        /// Move returns null if the move operation is across two mailboxes or between a mailbox and a
+        /// public folder.
+        /// </para>
+        /// </summary>
+        /// <param name="destinationFolderName">The name of the folder to which to move this item.</param>
+        /// <returns>The moved copy of this item.</returns>
+        public async System.Threading.Tasks.Task<Item> MoveAsync(WellKnownFolderName destinationFolderName)
+        {
+            return await this.MoveAsync(new FolderId(destinationFolderName));
         }
 
         /// <summary>

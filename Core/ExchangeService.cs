@@ -31,15 +31,14 @@ namespace Microsoft.Exchange.WebServices.Data
     using System.Globalization;
     using System.IO;
     using System.Linq;
-    using System.Net;
     using System.Xml;
     using Microsoft.Exchange.WebServices.Autodiscover;
     using Microsoft.Exchange.WebServices.Data.Enumerations;
     using Microsoft.Exchange.WebServices.Data.Groups;
-
-    /// <summary>
-    /// Represents a binding to the Exchange Web Services.
-    /// </summary>
+    using System.Net;
+    using System.Text;/// <summary>
+                      /// Represents a binding to the Exchange Web Services.
+                      /// </summary>
     public sealed class ExchangeService : ExchangeServiceBase
     {
         #region Constants
@@ -89,6 +88,29 @@ namespace Microsoft.Exchange.WebServices.Data
             return responses[0].Items;
         }
 
+        /// <summary>
+        /// Create async response object.
+        /// </summary>
+        /// <param name="responseObject">The response object.</param>
+        /// <param name="parentFolderId">The parent folder id.</param>
+        /// <param name="messageDisposition">The message disposition.</param>
+        /// <returns>The list of items created or modified as a result of the "creation" of the response object.</returns>
+        internal async System.Threading.Tasks.Task<List<Item>> InternalCreateResponseObjectAsync(
+            ServiceObject responseObject,
+            FolderId parentFolderId,
+            MessageDisposition? messageDisposition)
+        {
+            CreateResponseObjectRequest request = new CreateResponseObjectRequest(this, ServiceErrorHandling.ThrowOnError);
+
+            request.ParentFolderId = parentFolderId;
+            request.Items = new ServiceObject[] { responseObject };
+            request.MessageDisposition = messageDisposition;
+
+            ServiceResponseCollection<CreateResponseObjectResponse> responses = await request.ExecuteAsync();
+
+            return responses[0].Items;
+        }
+
         #endregion
 
         #region Folder operations
@@ -111,6 +133,23 @@ namespace Microsoft.Exchange.WebServices.Data
         }
 
         /// <summary>
+        /// Creates a folder. Calling this method results in a call to EWS.
+        /// </summary>
+        /// <param name="folder">The folder.</param>
+        /// <param name="parentFolderId">The parent folder id.</param>
+        internal async System.Threading.Tasks.Task CreateFolderAsync(
+            Folder folder,
+            FolderId parentFolderId)
+        {
+            CreateFolderRequest request = new CreateFolderRequest(this, ServiceErrorHandling.ThrowOnError);
+
+            request.Folders = new Folder[] { folder };
+            request.ParentFolderId = parentFolderId;
+
+            await request.ExecuteAsync();
+        }
+
+        /// <summary>
         /// Updates a folder.
         /// </summary>
         /// <param name="folder">The folder.</param>
@@ -121,6 +160,19 @@ namespace Microsoft.Exchange.WebServices.Data
             request.Folders.Add(folder);
 
             request.Execute();
+        }
+
+        /// <summary>
+        /// Updates async a folder.
+        /// </summary>
+        /// <param name="folder">The folder.</param>
+        internal async System.Threading.Tasks.Task UpdateFolderAsync(Folder folder)
+        {
+            UpdateFolderRequest request = new UpdateFolderRequest(this, ServiceErrorHandling.ThrowOnError);
+
+            request.Folders.Add(folder);
+
+            await request.ExecuteAsync();
         }
 
         /// <summary>
@@ -144,6 +196,26 @@ namespace Microsoft.Exchange.WebServices.Data
         }
 
         /// <summary>
+        /// Copies async a folder. Calling this method results in a call to EWS.
+        /// </summary>
+        /// <param name="folderId">The folder id.</param>
+        /// <param name="destinationFolderId">The destination folder id.</param>
+        /// <returns>Copy of folder.</returns>
+        internal async System.Threading.Tasks.Task<Folder> CopyFolderAsync(
+            FolderId folderId,
+            FolderId destinationFolderId)
+        {
+            CopyFolderRequest request = new CopyFolderRequest(this, ServiceErrorHandling.ThrowOnError);
+
+            request.DestinationFolderId = destinationFolderId;
+            request.FolderIds.Add(folderId);
+
+            ServiceResponseCollection<MoveCopyFolderResponse> responses = await request.ExecuteAsync();
+
+            return responses[0].Folder;
+        }
+
+        /// <summary>
         /// Move a folder.
         /// </summary>
         /// <param name="folderId">The folder id.</param>
@@ -159,6 +231,26 @@ namespace Microsoft.Exchange.WebServices.Data
             request.FolderIds.Add(folderId);
 
             ServiceResponseCollection<MoveCopyFolderResponse> responses = request.Execute();
+
+            return responses[0].Folder;
+        }
+
+        /// <summary>
+        /// Move async a folder.
+        /// </summary>
+        /// <param name="folderId">The folder id.</param>
+        /// <param name="destinationFolderId">The destination folder id.</param>
+        /// <returns>Moved folder.</returns>
+        internal async System.Threading.Tasks.Task<Folder> MoveFolderAsync(
+            FolderId folderId,
+            FolderId destinationFolderId)
+        {
+            MoveFolderRequest request = new MoveFolderRequest(this, ServiceErrorHandling.ThrowOnError);
+
+            request.DestinationFolderId = destinationFolderId;
+            request.FolderIds.Add(folderId);
+
+            ServiceResponseCollection<MoveCopyFolderResponse> responses = await request.ExecuteAsync();
 
             return responses[0].Folder;
         }
@@ -189,6 +281,31 @@ namespace Microsoft.Exchange.WebServices.Data
         }
 
         /// <summary>
+        /// Finds folders.
+        /// </summary>
+        /// <param name="parentFolderIds">The parent folder ids.</param>
+        /// <param name="searchFilter">The search filter. Available search filter classes
+        /// include SearchFilter.IsEqualTo, SearchFilter.ContainsSubstring and 
+        /// SearchFilter.SearchFilterCollection</param>
+        /// <param name="view">The view controlling the number of folders returned.</param>
+        /// <param name="errorHandlingMode">Indicates the type of error handling should be done.</param>
+        /// <returns>Collection of service responses.</returns>
+        private async System.Threading.Tasks.Task<ServiceResponseCollection<FindFolderResponse>> InternalFindFoldersAsync(
+            IEnumerable<FolderId> parentFolderIds,
+            SearchFilter searchFilter,
+            FolderView view,
+            ServiceErrorHandling errorHandlingMode)
+        {
+            FindFolderRequest request = new FindFolderRequest(this, errorHandlingMode);
+
+            request.ParentFolderIds.AddRange(parentFolderIds);
+            request.SearchFilter = searchFilter;
+            request.View = view;
+
+            return await request.ExecuteAsync();
+        }
+
+        /// <summary>
         /// Obtains a list of folders by searching the sub-folders of the specified folder.
         /// </summary>
         /// <param name="parentFolderId">The Id of the folder in which to search for folders.</param>
@@ -204,6 +321,30 @@ namespace Microsoft.Exchange.WebServices.Data
             EwsUtilities.ValidateParamAllowNull(searchFilter, "searchFilter");
 
             ServiceResponseCollection<FindFolderResponse> responses = this.InternalFindFolders(
+                new FolderId[] { parentFolderId },
+                searchFilter,
+                view,
+                ServiceErrorHandling.ThrowOnError);
+
+            return responses[0].Results;
+        }
+
+        /// <summary>
+        /// Obtains a list of folders by searching the sub-folders of the specified folder.
+        /// </summary>
+        /// <param name="parentFolderId">The Id of the folder in which to search for folders.</param>
+        /// <param name="searchFilter">The search filter. Available search filter classes
+        /// include SearchFilter.IsEqualTo, SearchFilter.ContainsSubstring and 
+        /// SearchFilter.SearchFilterCollection</param>
+        /// <param name="view">The view controlling the number of folders returned.</param>
+        /// <returns>An object representing the results of the search operation.</returns>
+        public async System.Threading.Tasks.Task<FindFoldersResults> FindFoldersAsync(FolderId parentFolderId, SearchFilter searchFilter, FolderView view)
+        {
+            EwsUtilities.ValidateParam(parentFolderId, "parentFolderId");
+            EwsUtilities.ValidateParam(view, "view");
+            EwsUtilities.ValidateParamAllowNull(searchFilter, "searchFilter");
+
+            ServiceResponseCollection<FindFolderResponse> responses = await this.InternalFindFoldersAsync(
                 new FolderId[] { parentFolderId },
                 searchFilter,
                 view,
@@ -235,6 +376,26 @@ namespace Microsoft.Exchange.WebServices.Data
         /// <summary>
         /// Obtains a list of folders by searching the sub-folders of the specified folder.
         /// </summary>
+        /// <param name="parentFolderId">The Id of the folder in which to search for folders.</param>
+        /// <param name="view">The view controlling the number of folders returned.</param>
+        /// <returns>An object representing the results of the search operation.</returns>
+        public async System.Threading.Tasks.Task<FindFoldersResults> FindFoldersAsync(FolderId parentFolderId, FolderView view)
+        {
+            EwsUtilities.ValidateParam(parentFolderId, "parentFolderId");
+            EwsUtilities.ValidateParam(view, "view");
+
+            ServiceResponseCollection<FindFolderResponse> responses = await this.InternalFindFoldersAsync(
+                new FolderId[] { parentFolderId },
+                null, /* searchFilter */
+                view,
+                ServiceErrorHandling.ThrowOnError);
+
+            return responses[0].Results;
+        }
+
+        /// <summary>
+        /// Obtains a list of folders by searching the sub-folders of the specified folder.
+        /// </summary>
         /// <param name="parentFolderName">The name of the folder in which to search for folders.</param>
         /// <param name="searchFilter">The search filter. Available search filter classes
         /// include SearchFilter.IsEqualTo, SearchFilter.ContainsSubstring and 
@@ -250,11 +411,36 @@ namespace Microsoft.Exchange.WebServices.Data
         /// Obtains a list of folders by searching the sub-folders of the specified folder.
         /// </summary>
         /// <param name="parentFolderName">The name of the folder in which to search for folders.</param>
+        /// <param name="searchFilter">The search filter. Available search filter classes
+        /// include SearchFilter.IsEqualTo, SearchFilter.ContainsSubstring and 
+        /// SearchFilter.SearchFilterCollection</param>
+        /// <param name="view">The view controlling the number of folders returned.</param>
+        /// <returns>An object representing the results of the search operation.</returns>
+        public async System.Threading.Tasks.Task<FindFoldersResults> FindFoldersAsync(WellKnownFolderName parentFolderName, SearchFilter searchFilter, FolderView view)
+        {
+            return await this.FindFoldersAsync(new FolderId(parentFolderName), searchFilter, view);
+        }
+
+        /// <summary>
+        /// Obtains a list of folders by searching the sub-folders of the specified folder.
+        /// </summary>
+        /// <param name="parentFolderName">The name of the folder in which to search for folders.</param>
         /// <param name="view">The view controlling the number of folders returned.</param>
         /// <returns>An object representing the results of the search operation.</returns>
         public FindFoldersResults FindFolders(WellKnownFolderName parentFolderName, FolderView view)
         {
             return this.FindFolders(new FolderId(parentFolderName), view);
+        }
+
+        /// <summary>
+        /// Obtains a list of folders by searching the sub-folders of the specified folder.
+        /// </summary>
+        /// <param name="parentFolderName">The name of the folder in which to search for folders.</param>
+        /// <param name="view">The view controlling the number of folders returned.</param>
+        /// <returns>An object representing the results of the search operation.</returns>
+        public async System.Threading.Tasks.Task<FindFoldersResults> FindFoldersAsync(WellKnownFolderName parentFolderName, FolderView view)
+        {
+            return await this.FindFoldersAsync(new FolderId(parentFolderName), view);
         }
 
         /// <summary>
@@ -278,6 +464,26 @@ namespace Microsoft.Exchange.WebServices.Data
         }
 
         /// <summary>
+        /// Load async specified properties for a folder.
+        /// </summary>
+        /// <param name="folder">The folder.</param>
+        /// <param name="propertySet">The property set.</param>
+        internal async System.Threading.Tasks.Task LoadPropertiesForFolderAsync(
+            Folder folder,
+            PropertySet propertySet)
+        {
+            EwsUtilities.ValidateParam(folder, "folder");
+            EwsUtilities.ValidateParam(propertySet, "propertySet");
+
+            GetFolderRequestForLoad request = new GetFolderRequestForLoad(this, ServiceErrorHandling.ThrowOnError);
+
+            request.FolderIds.Add(folder);
+            request.PropertySet = propertySet;
+
+            await request.ExecuteAsync();
+        }
+
+        /// <summary>
         /// Binds to a folder.
         /// </summary>
         /// <param name="folderId">The folder id.</param>
@@ -298,6 +504,26 @@ namespace Microsoft.Exchange.WebServices.Data
         }
 
         /// <summary>
+        /// Binds to a folder.
+        /// </summary>
+        /// <param name="folderId">The folder id.</param>
+        /// <param name="propertySet">The property set.</param>
+        /// <returns>Folder</returns>
+        internal async System.Threading.Tasks.Task<Folder> BindToFolderAsync(FolderId folderId, PropertySet propertySet)
+        {
+            EwsUtilities.ValidateParam(folderId, "folderId");
+            EwsUtilities.ValidateParam(propertySet, "propertySet");
+
+            ServiceResponseCollection<GetFolderResponse> responses = await this.InternalBindToFoldersAsync(
+                new[] { folderId },
+                propertySet,
+                ServiceErrorHandling.ThrowOnError
+            );
+
+            return responses[0].Folder;
+        }
+
+        /// <summary>
         /// Binds to folder.
         /// </summary>
         /// <typeparam name="TFolder">The type of the folder.</typeparam>
@@ -308,6 +534,32 @@ namespace Microsoft.Exchange.WebServices.Data
             where TFolder : Folder
         {
             Folder result = this.BindToFolder(folderId, propertySet);
+
+            if (result is TFolder)
+            {
+                return (TFolder)result;
+            }
+            else
+            {
+                throw new ServiceLocalException(
+                    string.Format(
+                        Strings.FolderTypeNotCompatible,
+                        result.GetType().Name,
+                        typeof(TFolder).Name));
+            }
+        }
+
+        /// <summary>
+        /// Binds to folder.
+        /// </summary>
+        /// <typeparam name="TFolder">The type of the folder.</typeparam>
+        /// <param name="folderId">The folder id.</param>
+        /// <param name="propertySet">The property set.</param>
+        /// <returns>Folder</returns>
+        internal async System.Threading.Tasks.Task<TFolder> BindToFolderAsync<TFolder>(FolderId folderId, PropertySet propertySet)
+            where TFolder : Folder
+        {
+            Folder result = await this.BindToFolderAsync(folderId, propertySet);
 
             if (result is TFolder)
             {
@@ -348,6 +600,26 @@ namespace Microsoft.Exchange.WebServices.Data
         /// </summary>
         /// <param name="folderIds">The Ids of the folders to bind to.</param>
         /// <param name="propertySet">The set of properties to load.</param>
+        /// <returns>A ServiceResponseCollection providing results for each of the specified folder Ids.</returns>
+        public async System.Threading.Tasks.Task<ServiceResponseCollection<GetFolderResponse>> BindToFoldersAsync(
+            IEnumerable<FolderId> folderIds,
+            PropertySet propertySet)
+        {
+            EwsUtilities.ValidateParamCollection(folderIds, "folderIds");
+            EwsUtilities.ValidateParam(propertySet, "propertySet");
+
+            return await this.InternalBindToFoldersAsync(
+                folderIds,
+                propertySet,
+                ServiceErrorHandling.ReturnErrors
+            );
+        }
+
+        /// <summary>
+        /// Binds to multiple folders in a single call to EWS.
+        /// </summary>
+        /// <param name="folderIds">The Ids of the folders to bind to.</param>
+        /// <param name="propertySet">The set of properties to load.</param>
         /// <param name="errorHandling">Type of error handling to perform.</param>
         /// <returns>A ServiceResponseCollection providing results for each of the specified folder Ids.</returns>
         private ServiceResponseCollection<GetFolderResponse> InternalBindToFolders(
@@ -361,6 +633,26 @@ namespace Microsoft.Exchange.WebServices.Data
             request.PropertySet = propertySet;
 
             return request.Execute();
+        }
+
+        /// <summary>
+        /// Binds to multiple folders in a single call to EWS.
+        /// </summary>
+        /// <param name="folderIds">The Ids of the folders to bind to.</param>
+        /// <param name="propertySet">The set of properties to load.</param>
+        /// <param name="errorHandling">Type of error handling to perform.</param>
+        /// <returns>A ServiceResponseCollection providing results for each of the specified folder Ids.</returns>
+        private async System.Threading.Tasks.Task<ServiceResponseCollection<GetFolderResponse>> InternalBindToFoldersAsync(
+            IEnumerable<FolderId> folderIds,
+            PropertySet propertySet,
+            ServiceErrorHandling errorHandling)
+        {
+            GetFolderRequest request = new GetFolderRequest(this, errorHandling);
+
+            request.FolderIds.AddRange(folderIds);
+            request.PropertySet = propertySet;
+
+            return await request.ExecuteAsync();
         }
 
         /// <summary>
@@ -380,6 +672,25 @@ namespace Microsoft.Exchange.WebServices.Data
             request.DeleteMode = deleteMode;
 
             request.Execute();
+        }
+
+        /// <summary>
+        /// Deletes a folder. Calling this method results in a call to EWS.
+        /// </summary>
+        /// <param name="folderId">The folder id.</param>
+        /// <param name="deleteMode">The delete mode.</param>
+        internal async System.Threading.Tasks.Task DeleteFolderAsync(
+            FolderId folderId,
+            DeleteMode deleteMode)
+        {
+            EwsUtilities.ValidateParam(folderId, "folderId");
+
+            DeleteFolderRequest request = new DeleteFolderRequest(this, ServiceErrorHandling.ThrowOnError);
+
+            request.FolderIds.Add(folderId);
+            request.DeleteMode = deleteMode;
+
+            await request.ExecuteAsync();
         }
 
         /// <summary>
@@ -466,6 +777,33 @@ namespace Microsoft.Exchange.WebServices.Data
         /// <param name="parentFolderId">The Id of the folder in which to place the newly created items. If null, items are created in their default folders.</param>
         /// <param name="messageDisposition">Indicates the disposition mode for items of type EmailMessage. Required if items contains at least one EmailMessage instance.</param>
         /// <param name="sendInvitationsMode">Indicates if and how invitations should be sent for items of type Appointment. Required if items contains at least one Appointment instance.</param>
+        /// <param name="errorHandling">What type of error handling should be performed.</param>
+        /// <returns>A ServiceResponseCollection providing creation results for each of the specified items.</returns>
+        private async System.Threading.Tasks.Task<ServiceResponseCollection<ServiceResponse>> InternalCreateItemsAsync(
+            IEnumerable<Item> items,
+            FolderId parentFolderId,
+            MessageDisposition? messageDisposition,
+            SendInvitationsMode? sendInvitationsMode,
+            ServiceErrorHandling errorHandling)
+        {
+            CreateItemRequest request = new CreateItemRequest(this, errorHandling);
+
+            request.ParentFolderId = parentFolderId;
+            request.Items = items;
+            request.MessageDisposition = messageDisposition;
+            request.SendInvitationsMode = sendInvitationsMode;
+
+            return await request.ExecuteAsync();
+        }
+
+        /// <summary>
+        /// Creates multiple items in a single EWS call. Supported item classes are EmailMessage, Appointment, Contact, PostItem, Task and Item.
+        /// CreateItems does not support items that have unsaved attachments.
+        /// </summary>
+        /// <param name="items">The items to create.</param>
+        /// <param name="parentFolderId">The Id of the folder in which to place the newly created items. If null, items are created in their default folders.</param>
+        /// <param name="messageDisposition">Indicates the disposition mode for items of type EmailMessage. Required if items contains at least one EmailMessage instance.</param>
+        /// <param name="sendInvitationsMode">Indicates if and how invitations should be sent for items of type Appointment. Required if items contains at least one Appointment instance.</param>
         /// <returns>A ServiceResponseCollection providing creation results for each of the specified items.</returns>
         public ServiceResponseCollection<ServiceResponse> CreateItems(
             IEnumerable<Item> items,
@@ -515,6 +853,27 @@ namespace Microsoft.Exchange.WebServices.Data
         }
 
         /// <summary>
+        /// Creates an item. Calling this method results in a call to EWS.
+        /// </summary>
+        /// <param name="item">The item to create.</param>
+        /// <param name="parentFolderId">The Id of the folder in which to place the newly created item. If null, the item is created in its default folders.</param>
+        /// <param name="messageDisposition">Indicates the disposition mode for items of type EmailMessage. Required if item is an EmailMessage instance.</param>
+        /// <param name="sendInvitationsMode">Indicates if and how invitations should be sent for item of type Appointment. Required if item is an Appointment instance.</param>
+        internal async System.Threading.Tasks.Task CreateItemAsync(
+            Item item,
+            FolderId parentFolderId,
+            MessageDisposition? messageDisposition,
+            SendInvitationsMode? sendInvitationsMode)
+        {
+            await this.InternalCreateItemsAsync(
+                new Item[] { item },
+                parentFolderId,
+                messageDisposition,
+                sendInvitationsMode,
+                ServiceErrorHandling.ThrowOnError);
+        }
+
+        /// <summary>
         /// Updates multiple items in a single EWS call. UpdateItems does not support items that have unsaved attachments.
         /// </summary>
         /// <param name="items">The items to update.</param>
@@ -545,6 +904,39 @@ namespace Microsoft.Exchange.WebServices.Data
 
             return request.Execute();
         }
+
+        /// <summary>
+        /// Updates multiple items in a single EWS call. UpdateItems does not support items that have unsaved attachments.
+        /// </summary>
+        /// <param name="items">The items to update.</param>
+        /// <param name="savedItemsDestinationFolderId">The folder in which to save sent messages, meeting invitations or cancellations. If null, the messages, meeting invitation or cancellations are saved in the Sent Items folder.</param>
+        /// <param name="conflictResolution">The conflict resolution mode.</param>
+        /// <param name="messageDisposition">Indicates the disposition mode for items of type EmailMessage. Required if items contains at least one EmailMessage instance.</param>
+        /// <param name="sendInvitationsOrCancellationsMode">Indicates if and how invitations and/or cancellations should be sent for items of type Appointment. Required if items contains at least one Appointment instance.</param>
+        /// <param name="errorHandling">What type of error handling should be performed.</param>
+        /// <param name="suppressReadReceipt">Whether to suppress read receipts</param>
+        /// <returns>A ServiceResponseCollection providing update results for each of the specified items.</returns>
+        private async System.Threading.Tasks.Task<ServiceResponseCollection<UpdateItemResponse>> InternalUpdateItemsAsync(
+            IEnumerable<Item> items,
+            FolderId savedItemsDestinationFolderId,
+            ConflictResolutionMode conflictResolution,
+            MessageDisposition? messageDisposition,
+            SendInvitationsOrCancellationsMode? sendInvitationsOrCancellationsMode,
+            ServiceErrorHandling errorHandling,
+            bool suppressReadReceipt)
+        {
+            UpdateItemRequest request = new UpdateItemRequest(this, errorHandling);
+
+            request.Items.AddRange(items);
+            request.SavedItemsDestinationFolder = savedItemsDestinationFolderId;
+            request.MessageDisposition = messageDisposition;
+            request.ConflictResolutionMode = conflictResolution;
+            request.SendInvitationsOrCancellationsMode = sendInvitationsOrCancellationsMode;
+            request.SuppressReadReceipts = suppressReadReceipt;
+
+            return await request.ExecuteAsync();
+        }
+
 
         /// <summary>
         /// Updates multiple items in a single EWS call. UpdateItems does not support items that have unsaved attachments.
@@ -655,6 +1047,37 @@ namespace Microsoft.Exchange.WebServices.Data
         }
 
         /// <summary>
+        /// Updates an item.
+        /// </summary>
+        /// <param name="item">The item to update.</param>
+        /// <param name="savedItemsDestinationFolderId">The folder in which to save sent messages, meeting invitations or cancellations. If null, the message, meeting invitation or cancellation is saved in the Sent Items folder.</param>
+        /// <param name="conflictResolution">The conflict resolution mode.</param>
+        /// <param name="messageDisposition">Indicates the disposition mode for an item of type EmailMessage. Required if item is an EmailMessage instance.</param>
+        /// <param name="sendInvitationsOrCancellationsMode">Indicates if and how invitations and/or cancellations should be sent for ian tem of type Appointment. Required if item is an Appointment instance.</param>
+        /// <param name="suppressReadReceipts">Whether to suppress read receipts</param>
+        /// <returns>Updated item.</returns>
+        internal async System.Threading.Tasks.Task<Item> UpdateItemAsync(
+            Item item,
+            FolderId savedItemsDestinationFolderId,
+            ConflictResolutionMode conflictResolution,
+            MessageDisposition? messageDisposition,
+            SendInvitationsOrCancellationsMode? sendInvitationsOrCancellationsMode,
+            bool suppressReadReceipts)
+        {
+            ServiceResponseCollection<UpdateItemResponse> responses = await this.InternalUpdateItemsAsync(
+                new Item[] { item },
+                savedItemsDestinationFolderId,
+                conflictResolution,
+                messageDisposition,
+                sendInvitationsOrCancellationsMode,
+                ServiceErrorHandling.ThrowOnError,
+                suppressReadReceipts);
+
+            return responses[0].ReturnedItem;
+        }
+
+
+        /// <summary>
         /// Sends an item.
         /// </summary>
         /// <param name="item">The item.</param>
@@ -669,6 +1092,23 @@ namespace Microsoft.Exchange.WebServices.Data
             request.SavedCopyDestinationFolderId = savedCopyDestinationFolderId;
 
             request.Execute();
+        }
+
+        /// <summary>
+        /// Sends async an item.
+        /// </summary>
+        /// <param name="item">The item.</param>
+        /// <param name="savedCopyDestinationFolderId">The saved copy destination folder id.</param>
+        internal async System.Threading.Tasks.Task SendItemAsync(
+            Item item,
+            FolderId savedCopyDestinationFolderId)
+        {
+            SendItemRequest request = new SendItemRequest(this, ServiceErrorHandling.ThrowOnError);
+
+            request.Items = new Item[] { item };
+            request.SavedCopyDestinationFolderId = savedCopyDestinationFolderId;
+
+            await request.ExecuteAsync();
         }
 
         /// <summary>
@@ -698,12 +1138,51 @@ namespace Microsoft.Exchange.WebServices.Data
         /// </summary>
         /// <param name="itemIds">The Ids of the items to copy.</param>
         /// <param name="destinationFolderId">The Id of the folder to copy the items to.</param>
+        /// <param name="returnNewItemIds">Flag indicating whether service should return new ItemIds or not.</param>
+        /// <param name="errorHandling">What type of error handling should be performed.</param>
+        /// <returns>A ServiceResponseCollection providing copy results for each of the specified item Ids.</returns>
+        private async System.Threading.Tasks.Task<ServiceResponseCollection<MoveCopyItemResponse>> InternalCopyItemsAsync(
+            IEnumerable<ItemId> itemIds,
+            FolderId destinationFolderId,
+            bool? returnNewItemIds,
+            ServiceErrorHandling errorHandling)
+        {
+            CopyItemRequest request = new CopyItemRequest(this, errorHandling);
+            request.ItemIds.AddRange(itemIds);
+            request.DestinationFolderId = destinationFolderId;
+            request.ReturnNewItemIds = returnNewItemIds;
+
+            return await request.ExecuteAsync();
+        }
+
+        /// <summary>
+        /// Copies multiple items in a single call to EWS.
+        /// </summary>
+        /// <param name="itemIds">The Ids of the items to copy.</param>
+        /// <param name="destinationFolderId">The Id of the folder to copy the items to.</param>
         /// <returns>A ServiceResponseCollection providing copy results for each of the specified item Ids.</returns>
         public ServiceResponseCollection<MoveCopyItemResponse> CopyItems(
             IEnumerable<ItemId> itemIds,
             FolderId destinationFolderId)
         {
             return this.InternalCopyItems(
+                itemIds,
+                destinationFolderId,
+                null,
+                ServiceErrorHandling.ReturnErrors);
+        }
+
+        /// <summary>
+        /// Copies multiple items in a single call to EWS.
+        /// </summary>
+        /// <param name="itemIds">The Ids of the items to copy.</param>
+        /// <param name="destinationFolderId">The Id of the folder to copy the items to.</param>
+        /// <returns>A ServiceResponseCollection providing copy results for each of the specified item Ids.</returns>
+        public async System.Threading.Tasks.Task<ServiceResponseCollection<MoveCopyItemResponse>> CopyItemsAsync(
+            IEnumerable<ItemId> itemIds,
+            FolderId destinationFolderId)
+        {
+            return await this.InternalCopyItemsAsync(
                 itemIds,
                 destinationFolderId,
                 null,
@@ -735,6 +1214,30 @@ namespace Microsoft.Exchange.WebServices.Data
         }
 
         /// <summary>
+        /// Copies multiple items in a single call to EWS.
+        /// </summary>
+        /// <param name="itemIds">The Ids of the items to copy.</param>
+        /// <param name="destinationFolderId">The Id of the folder to copy the items to.</param>
+        /// <param name="returnNewItemIds">Flag indicating whether service should return new ItemIds or not.</param>
+        /// <returns>A ServiceResponseCollection providing copy results for each of the specified item Ids.</returns>
+        public async System.Threading.Tasks.Task<ServiceResponseCollection<MoveCopyItemResponse>> CopyItemsAsync(
+            IEnumerable<ItemId> itemIds,
+            FolderId destinationFolderId,
+            bool returnNewItemIds)
+        {
+            EwsUtilities.ValidateMethodVersion(
+                this,
+                ExchangeVersion.Exchange2010_SP1,
+                "CopyItems");
+
+            return await this.InternalCopyItemsAsync(
+                itemIds,
+                destinationFolderId,
+                returnNewItemIds,
+                ServiceErrorHandling.ReturnErrors);
+        }
+
+        /// <summary>
         /// Copies an item. Calling this method results in a call to EWS.
         /// </summary>
         /// <param name="itemId">The Id of the item to copy.</param>
@@ -749,6 +1252,24 @@ namespace Microsoft.Exchange.WebServices.Data
                 destinationFolderId,
                 null,
                 ServiceErrorHandling.ThrowOnError)[0].Item;
+        }
+
+        /// <summary>
+        /// Copies an item. Calling this method results in a call to EWS.
+        /// </summary>
+        /// <param name="itemId">The Id of the item to copy.</param>
+        /// <param name="destinationFolderId">The Id of the folder to copy the item to.</param>
+        /// <returns>The copy of the item.</returns>
+        internal async System.Threading.Tasks.Task<Item> CopyItemAsync(
+            ItemId itemId,
+            FolderId destinationFolderId)
+        {
+            var res = await this.InternalCopyItemsAsync(
+                new ItemId[] { itemId },
+                destinationFolderId,
+                null,
+                ServiceErrorHandling.ThrowOnError);
+            return res[0].Item;
         }
 
         /// <summary>
@@ -779,12 +1300,52 @@ namespace Microsoft.Exchange.WebServices.Data
         /// </summary>
         /// <param name="itemIds">The Ids of the items to move.</param>
         /// <param name="destinationFolderId">The Id of the folder to move the items to.</param>
+        /// <param name="returnNewItemIds">Flag indicating whether service should return new ItemIds or not.</param>
+        /// <param name="errorHandling">What type of error handling should be performed.</param>
+        /// <returns>A ServiceResponseCollection providing copy results for each of the specified item Ids.</returns>
+        private async System.Threading.Tasks.Task<ServiceResponseCollection<MoveCopyItemResponse>> InternalMoveItemsAsync(
+            IEnumerable<ItemId> itemIds,
+            FolderId destinationFolderId,
+            bool? returnNewItemIds,
+            ServiceErrorHandling errorHandling)
+        {
+            MoveItemRequest request = new MoveItemRequest(this, errorHandling);
+
+            request.ItemIds.AddRange(itemIds);
+            request.DestinationFolderId = destinationFolderId;
+            request.ReturnNewItemIds = returnNewItemIds;
+
+            return await request.ExecuteAsync();
+        }
+
+        /// <summary>
+        /// Moves multiple items in a single call to EWS.
+        /// </summary>
+        /// <param name="itemIds">The Ids of the items to move.</param>
+        /// <param name="destinationFolderId">The Id of the folder to move the items to.</param>
         /// <returns>A ServiceResponseCollection providing copy results for each of the specified item Ids.</returns>
         public ServiceResponseCollection<MoveCopyItemResponse> MoveItems(
             IEnumerable<ItemId> itemIds,
             FolderId destinationFolderId)
         {
             return this.InternalMoveItems(
+                itemIds,
+                destinationFolderId,
+                null,
+                ServiceErrorHandling.ReturnErrors);
+        }
+
+        /// <summary>
+        /// Moves multiple items in a single call to EWS.
+        /// </summary>
+        /// <param name="itemIds">The Ids of the items to move.</param>
+        /// <param name="destinationFolderId">The Id of the folder to move the items to.</param>
+        /// <returns>A ServiceResponseCollection providing copy results for each of the specified item Ids.</returns>
+        public async System.Threading.Tasks.Task<ServiceResponseCollection<MoveCopyItemResponse>> MoveItemsAsync(
+            IEnumerable<ItemId> itemIds,
+            FolderId destinationFolderId)
+        {
+            return await this.InternalMoveItemsAsync(
                 itemIds,
                 destinationFolderId,
                 null,
@@ -816,6 +1377,30 @@ namespace Microsoft.Exchange.WebServices.Data
         }
 
         /// <summary>
+        /// Moves multiple items in a single call to EWS.
+        /// </summary>
+        /// <param name="itemIds">The Ids of the items to move.</param>
+        /// <param name="destinationFolderId">The Id of the folder to move the items to.</param>
+        /// <param name="returnNewItemIds">Flag indicating whether service should return new ItemIds or not.</param>
+        /// <returns>A ServiceResponseCollection providing copy results for each of the specified item Ids.</returns>
+        public async System.Threading.Tasks.Task<ServiceResponseCollection<MoveCopyItemResponse>> MoveItemsAsync(
+            IEnumerable<ItemId> itemIds,
+            FolderId destinationFolderId,
+            bool returnNewItemIds)
+        {
+            EwsUtilities.ValidateMethodVersion(
+                this,
+                ExchangeVersion.Exchange2010_SP1,
+                "MoveItems");
+
+            return await this.InternalMoveItemsAsync(
+                itemIds,
+                destinationFolderId,
+                returnNewItemIds,
+                ServiceErrorHandling.ReturnErrors);
+        }
+
+        /// <summary>
         /// Move an item.
         /// </summary>
         /// <param name="itemId">The Id of the item to move.</param>
@@ -830,6 +1415,24 @@ namespace Microsoft.Exchange.WebServices.Data
                 destinationFolderId,
                 null,
                 ServiceErrorHandling.ThrowOnError)[0].Item;
+        }
+
+        /// <summary>
+        /// Move an item.
+        /// </summary>
+        /// <param name="itemId">The Id of the item to move.</param>
+        /// <param name="destinationFolderId">The Id of the folder to move the item to.</param>
+        /// <returns>The moved item.</returns>
+        internal async System.Threading.Tasks.Task<Item> MoveItemAsync(
+            ItemId itemId,
+            FolderId destinationFolderId)
+        {
+            var res = await this.InternalMoveItemsAsync(
+                new ItemId[] { itemId },
+                destinationFolderId,
+                null,
+                ServiceErrorHandling.ThrowOnError);
+            return res[0].Item;
         }
 
         /// <summary>
@@ -890,6 +1493,45 @@ namespace Microsoft.Exchange.WebServices.Data
         }
 
         /// <summary>
+        /// Finds items.
+        /// </summary>
+        /// <typeparam name="TItem">The type of the item.</typeparam>
+        /// <param name="parentFolderIds">The parent folder ids.</param>
+        /// <param name="searchFilter">The search filter. Available search filter classes
+        /// include SearchFilter.IsEqualTo, SearchFilter.ContainsSubstring and 
+        /// SearchFilter.SearchFilterCollection</param>
+        /// <param name="queryString">query string to be used for indexed search.</param>
+        /// <param name="view">The view controlling the number of items returned.</param>
+        /// <param name="groupBy">The group by.</param>
+        /// <param name="errorHandlingMode">Indicates the type of error handling should be done.</param>
+        /// <returns>Service response collection.</returns>
+        internal async System.Threading.Tasks.Task<ServiceResponseCollection<FindItemResponse<TItem>>> FindItemsAsync<TItem>(
+            IEnumerable<FolderId> parentFolderIds,
+            SearchFilter searchFilter,
+            string queryString,
+            ViewBase view,
+            Grouping groupBy,
+            ServiceErrorHandling errorHandlingMode)
+            where TItem : Item
+        {
+            EwsUtilities.ValidateParamCollection(parentFolderIds, "parentFolderIds");
+            EwsUtilities.ValidateParam(view, "view");
+            EwsUtilities.ValidateParamAllowNull(groupBy, "groupBy");
+            EwsUtilities.ValidateParamAllowNull(queryString, "queryString");
+            EwsUtilities.ValidateParamAllowNull(searchFilter, "searchFilter");
+
+            FindItemRequest<TItem> request = new FindItemRequest<TItem>(this, errorHandlingMode);
+
+            request.ParentFolderIds.AddRange(parentFolderIds);
+            request.SearchFilter = searchFilter;
+            request.QueryString = queryString;
+            request.View = view;
+            request.GroupBy = groupBy;
+
+            return await request.ExecuteAsync();
+        }
+
+        /// <summary>
         /// Obtains a list of items by searching the contents of a specific folder. Calling this method results in a call to EWS.
         /// </summary>
         /// <param name="parentFolderId">The Id of the folder in which to search for items.</param>
@@ -901,6 +1543,28 @@ namespace Microsoft.Exchange.WebServices.Data
             EwsUtilities.ValidateParamAllowNull(queryString, "queryString");
 
             ServiceResponseCollection<FindItemResponse<Item>> responses = this.FindItems<Item>(
+                new FolderId[] { parentFolderId },
+                null, /* searchFilter */
+                queryString,
+                view,
+                null,   /* groupBy */
+                ServiceErrorHandling.ThrowOnError);
+
+            return responses[0].Results;
+        }
+
+        /// <summary>
+        /// Obtains a list of items by searching the contents of a specific folder. Calling this method results in a call to EWS.
+        /// </summary>
+        /// <param name="parentFolderId">The Id of the folder in which to search for items.</param>
+        /// <param name="queryString">the search string to be used for indexed search, if any.</param>
+        /// <param name="view">The view controlling the number of items returned.</param>
+        /// <returns>An object representing the results of the search operation.</returns>
+        public async System.Threading.Tasks.Task<FindItemsResults<Item>> FindItemsAsync(FolderId parentFolderId, string queryString, ViewBase view)
+        {
+            EwsUtilities.ValidateParamAllowNull(queryString, "queryString");
+
+            ServiceResponseCollection<FindItemResponse<Item>> responses = await this.FindItemsAsync<Item>(
                 new FolderId[] { parentFolderId },
                 null, /* searchFilter */
                 queryString,
@@ -951,6 +1615,37 @@ namespace Microsoft.Exchange.WebServices.Data
         /// <param name="queryString">the search string to be used for indexed search, if any.</param>
         /// <param name="returnHighlightTerms">Flag indicating if highlight terms should be returned in the response</param>
         /// <param name="view">The view controlling the number of items returned.</param>
+        /// <returns>An object representing the results of the search operation.</returns>
+        public async System.Threading.Tasks.Task<FindItemsResults<Item>> FindItemsAsync(FolderId parentFolderId, string queryString, bool returnHighlightTerms, ViewBase view)
+        {
+            FolderId[] parentFolderIds = new FolderId[] { parentFolderId };
+
+            EwsUtilities.ValidateParamCollection(parentFolderIds, "parentFolderIds");
+            EwsUtilities.ValidateParam(view, "view");
+            EwsUtilities.ValidateParamAllowNull(queryString, "queryString");
+            EwsUtilities.ValidateParamAllowNull(returnHighlightTerms, "returnHighlightTerms");
+            EwsUtilities.ValidateMethodVersion(this, ExchangeVersion.Exchange2013, "FindItems");
+
+            FindItemRequest<Item> request = new FindItemRequest<Item>(this, ServiceErrorHandling.ThrowOnError);
+
+            request.ParentFolderIds.AddRange(parentFolderIds);
+            request.QueryString = queryString;
+            request.ReturnHighlightTerms = returnHighlightTerms;
+            request.View = view;
+
+            ServiceResponseCollection<FindItemResponse<Item>> responses = await request.ExecuteAsync();
+            return responses[0].Results;
+        }
+
+        /// <summary>
+        /// Obtains a list of items by searching the contents of a specific folder. 
+        /// Along with conversations, a list of highlight terms are returned.
+        /// Calling this method results in a call to EWS.
+        /// </summary>
+        /// <param name="parentFolderId">The Id of the folder in which to search for items.</param>
+        /// <param name="queryString">the search string to be used for indexed search, if any.</param>
+        /// <param name="returnHighlightTerms">Flag indicating if highlight terms should be returned in the response</param>
+        /// <param name="view">The view controlling the number of items returned.</param>
         /// <param name="groupBy">The group by clause.</param>
         /// <returns>An object representing the results of the search operation.</returns>
         public GroupedFindItemsResults<Item> FindItems(FolderId parentFolderId, string queryString, bool returnHighlightTerms, ViewBase view, Grouping groupBy)
@@ -977,6 +1672,40 @@ namespace Microsoft.Exchange.WebServices.Data
         }
 
         /// <summary>
+        /// Obtains a list of items by searching the contents of a specific folder. 
+        /// Along with conversations, a list of highlight terms are returned.
+        /// Calling this method results in a call to EWS.
+        /// </summary>
+        /// <param name="parentFolderId">The Id of the folder in which to search for items.</param>
+        /// <param name="queryString">the search string to be used for indexed search, if any.</param>
+        /// <param name="returnHighlightTerms">Flag indicating if highlight terms should be returned in the response</param>
+        /// <param name="view">The view controlling the number of items returned.</param>
+        /// <param name="groupBy">The group by clause.</param>
+        /// <returns>An object representing the results of the search operation.</returns>
+        public async System.Threading.Tasks.Task<GroupedFindItemsResults<Item>> FindItemsAsync(FolderId parentFolderId, string queryString, bool returnHighlightTerms, ViewBase view, Grouping groupBy)
+        {
+            FolderId[] parentFolderIds = new FolderId[] { parentFolderId };
+
+            EwsUtilities.ValidateParamCollection(parentFolderIds, "parentFolderIds");
+            EwsUtilities.ValidateParam(view, "view");
+            EwsUtilities.ValidateParam(groupBy, "groupBy");
+            EwsUtilities.ValidateParamAllowNull(queryString, "queryString");
+            EwsUtilities.ValidateParamAllowNull(returnHighlightTerms, "returnHighlightTerms");
+            EwsUtilities.ValidateMethodVersion(this, ExchangeVersion.Exchange2013, "FindItems");
+
+            FindItemRequest<Item> request = new FindItemRequest<Item>(this, ServiceErrorHandling.ThrowOnError);
+
+            request.ParentFolderIds.AddRange(parentFolderIds);
+            request.QueryString = queryString;
+            request.ReturnHighlightTerms = returnHighlightTerms;
+            request.View = view;
+            request.GroupBy = groupBy;
+
+            ServiceResponseCollection<FindItemResponse<Item>> responses = await request.ExecuteAsync();
+            return responses[0].GroupedFindResults;
+        }
+
+        /// <summary>
         /// Obtains a list of items by searching the contents of a specific folder. Calling this method results in a call to EWS.
         /// </summary>
         /// <param name="parentFolderId">The Id of the folder in which to search for items.</param>
@@ -990,6 +1719,30 @@ namespace Microsoft.Exchange.WebServices.Data
             EwsUtilities.ValidateParamAllowNull(searchFilter, "searchFilter");
 
             ServiceResponseCollection<FindItemResponse<Item>> responses = this.FindItems<Item>(
+                new FolderId[] { parentFolderId },
+                searchFilter,
+                null, /* queryString */
+                view,
+                null,   /* groupBy */
+                ServiceErrorHandling.ThrowOnError);
+
+            return responses[0].Results;
+        }
+
+        /// <summary>
+        /// Obtains a list of items by searching the contents of a specific folder. Calling this method results in a call to EWS.
+        /// </summary>
+        /// <param name="parentFolderId">The Id of the folder in which to search for items.</param>
+        /// <param name="searchFilter">The search filter. Available search filter classes
+        /// include SearchFilter.IsEqualTo, SearchFilter.ContainsSubstring and 
+        /// SearchFilter.SearchFilterCollection</param>
+        /// <param name="view">The view controlling the number of items returned.</param>
+        /// <returns>An object representing the results of the search operation.</returns>
+        public async System.Threading.Tasks.Task<FindItemsResults<Item>> FindItemsAsync(FolderId parentFolderId, SearchFilter searchFilter, ViewBase view)
+        {
+            EwsUtilities.ValidateParamAllowNull(searchFilter, "searchFilter");
+
+            ServiceResponseCollection<FindItemResponse<Item>> responses = await this.FindItemsAsync<Item>(
                 new FolderId[] { parentFolderId },
                 searchFilter,
                 null, /* queryString */
@@ -1022,6 +1775,25 @@ namespace Microsoft.Exchange.WebServices.Data
         /// <summary>
         /// Obtains a list of items by searching the contents of a specific folder. Calling this method results in a call to EWS.
         /// </summary>
+        /// <param name="parentFolderId">The Id of the folder in which to search for items.</param>
+        /// <param name="view">The view controlling the number of items returned.</param>
+        /// <returns>An object representing the results of the search operation.</returns>
+        public async System.Threading.Tasks.Task<FindItemsResults<Item>> FindItemsAsync(FolderId parentFolderId, ViewBase view)
+        {
+            ServiceResponseCollection<FindItemResponse<Item>> responses = await this.FindItemsAsync<Item>(
+                new FolderId[] { parentFolderId },
+                null, /* searchFilter */
+                null, /* queryString */
+                view,
+                null, /* groupBy */
+                ServiceErrorHandling.ThrowOnError);
+
+            return responses[0].Results;
+        }
+
+        /// <summary>
+        /// Obtains a list of items by searching the contents of a specific folder. Calling this method results in a call to EWS.
+        /// </summary>
         /// <param name="parentFolderName">The name of the folder in which to search for items.</param>
         /// <param name="queryString">query string to be used for indexed search</param>
         /// <param name="view">The view controlling the number of items returned.</param>
@@ -1029,6 +1801,18 @@ namespace Microsoft.Exchange.WebServices.Data
         public FindItemsResults<Item> FindItems(WellKnownFolderName parentFolderName, string queryString, ViewBase view)
         {
             return this.FindItems(new FolderId(parentFolderName), queryString, view);
+        }
+
+        /// <summary>
+        /// Obtains a list of items by searching the contents of a specific folder. Calling this method results in a call to EWS.
+        /// </summary>
+        /// <param name="parentFolderName">The name of the folder in which to search for items.</param>
+        /// <param name="queryString">query string to be used for indexed search</param>
+        /// <param name="view">The view controlling the number of items returned.</param>
+        /// <returns>An object representing the results of the search operation.</returns>
+        public async System.Threading.Tasks.Task<FindItemsResults<Item>> FindItemsAsync(WellKnownFolderName parentFolderName, string queryString, ViewBase view)
+        {
+            return await this.FindItemsAsync(new FolderId(parentFolderName), queryString, view);
         }
 
         /// <summary>
@@ -1052,11 +1836,42 @@ namespace Microsoft.Exchange.WebServices.Data
         /// Obtains a list of items by searching the contents of a specific folder. Calling this method results in a call to EWS.
         /// </summary>
         /// <param name="parentFolderName">The name of the folder in which to search for items.</param>
+        /// <param name="searchFilter">The search filter. Available search filter classes
+        /// include SearchFilter.IsEqualTo, SearchFilter.ContainsSubstring and 
+        /// SearchFilter.SearchFilterCollection</param>
+        /// <param name="view">The view controlling the number of items returned.</param>
+        /// <returns>An object representing the results of the search operation.</returns>
+        public async System.Threading.Tasks.Task<FindItemsResults<Item>> FindItemsAsync(WellKnownFolderName parentFolderName, SearchFilter searchFilter, ViewBase view)
+        {
+            return await this.FindItemsAsync(
+                new FolderId(parentFolderName),
+                searchFilter,
+                view);
+        }
+
+        /// <summary>
+        /// Obtains a list of items by searching the contents of a specific folder. Calling this method results in a call to EWS.
+        /// </summary>
+        /// <param name="parentFolderName">The name of the folder in which to search for items.</param>
         /// <param name="view">The view controlling the number of items returned.</param>
         /// <returns>An object representing the results of the search operation.</returns>
         public FindItemsResults<Item> FindItems(WellKnownFolderName parentFolderName, ViewBase view)
         {
             return this.FindItems(
+                new FolderId(parentFolderName),
+                (SearchFilter)null,
+                view);
+        }
+
+        /// <summary>
+        /// Obtains a list of items by searching the contents of a specific folder. Calling this method results in a call to EWS.
+        /// </summary>
+        /// <param name="parentFolderName">The name of the folder in which to search for items.</param>
+        /// <param name="view">The view controlling the number of items returned.</param>
+        /// <returns>An object representing the results of the search operation.</returns>
+        public async System.Threading.Tasks.Task<FindItemsResults<Item>> FindItemsAsync(WellKnownFolderName parentFolderName, ViewBase view)
+        {
+            return await this.FindItemsAsync(
                 new FolderId(parentFolderName),
                 (SearchFilter)null,
                 view);
@@ -1080,6 +1895,34 @@ namespace Microsoft.Exchange.WebServices.Data
             EwsUtilities.ValidateParamAllowNull(queryString, "queryString");
 
             ServiceResponseCollection<FindItemResponse<Item>> responses = this.FindItems<Item>(
+                new FolderId[] { parentFolderId },
+                null, /* searchFilter */
+                queryString,
+                view,
+                groupBy,
+                ServiceErrorHandling.ThrowOnError);
+
+            return responses[0].GroupedFindResults;
+        }
+
+        /// <summary>
+        /// Obtains a grouped list of items by searching the contents of a specific folder. Calling this method results in a call to EWS.
+        /// </summary>
+        /// <param name="parentFolderId">The Id of the folder in which to search for items.</param>
+        /// <param name="queryString">query string to be used for indexed search</param>
+        /// <param name="view">The view controlling the number of items returned.</param>
+        /// <param name="groupBy">The group by clause.</param>
+        /// <returns>A list of items containing the contents of the specified folder.</returns>
+        public async System.Threading.Tasks.Task<GroupedFindItemsResults<Item>> FindItemsAsync(
+            FolderId parentFolderId,
+            string queryString,
+            ViewBase view,
+            Grouping groupBy)
+        {
+            EwsUtilities.ValidateParam(groupBy, "groupBy");
+            EwsUtilities.ValidateParamAllowNull(queryString, "queryString");
+
+            ServiceResponseCollection<FindItemResponse<Item>> responses = await this.FindItemsAsync<Item>(
                 new FolderId[] { parentFolderId },
                 null, /* searchFilter */
                 queryString,
@@ -1124,6 +1967,36 @@ namespace Microsoft.Exchange.WebServices.Data
         /// Obtains a grouped list of items by searching the contents of a specific folder. Calling this method results in a call to EWS.
         /// </summary>
         /// <param name="parentFolderId">The Id of the folder in which to search for items.</param>
+        /// <param name="searchFilter">The search filter. Available search filter classes
+        /// include SearchFilter.IsEqualTo, SearchFilter.ContainsSubstring and 
+        /// SearchFilter.SearchFilterCollection</param>
+        /// <param name="view">The view controlling the number of items returned.</param>
+        /// <param name="groupBy">The group by clause.</param>
+        /// <returns>A list of items containing the contents of the specified folder.</returns>
+        public async System.Threading.Tasks.Task<GroupedFindItemsResults<Item>> FindItemsAsync(
+            FolderId parentFolderId,
+            SearchFilter searchFilter,
+            ViewBase view,
+            Grouping groupBy)
+        {
+            EwsUtilities.ValidateParam(groupBy, "groupBy");
+            EwsUtilities.ValidateParamAllowNull(searchFilter, "searchFilter");
+
+            ServiceResponseCollection<FindItemResponse<Item>> responses = await this.FindItemsAsync<Item>(
+                new FolderId[] { parentFolderId },
+                searchFilter,
+                null, /* queryString */
+                view,
+                groupBy,
+                ServiceErrorHandling.ThrowOnError);
+
+            return responses[0].GroupedFindResults;
+        }
+
+        /// <summary>
+        /// Obtains a grouped list of items by searching the contents of a specific folder. Calling this method results in a call to EWS.
+        /// </summary>
+        /// <param name="parentFolderId">The Id of the folder in which to search for items.</param>
         /// <param name="view">The view controlling the number of items returned.</param>
         /// <param name="groupBy">The group by clause.</param>
         /// <returns>A list of items containing the contents of the specified folder.</returns>
@@ -1135,6 +2008,31 @@ namespace Microsoft.Exchange.WebServices.Data
             EwsUtilities.ValidateParam(groupBy, "groupBy");
 
             ServiceResponseCollection<FindItemResponse<Item>> responses = this.FindItems<Item>(
+                new FolderId[] { parentFolderId },
+                null, /* searchFilter */
+                null, /* queryString */
+                view,
+                groupBy,
+                ServiceErrorHandling.ThrowOnError);
+
+            return responses[0].GroupedFindResults;
+        }
+
+        /// <summary>
+        /// Obtains a grouped list of items by searching the contents of a specific folder. Calling this method results in a call to EWS.
+        /// </summary>
+        /// <param name="parentFolderId">The Id of the folder in which to search for items.</param>
+        /// <param name="view">The view controlling the number of items returned.</param>
+        /// <param name="groupBy">The group by clause.</param>
+        /// <returns>A list of items containing the contents of the specified folder.</returns>
+        public async System.Threading.Tasks.Task<GroupedFindItemsResults<Item>> FindItemsAsync(
+            FolderId parentFolderId,
+            ViewBase view,
+            Grouping groupBy)
+        {
+            EwsUtilities.ValidateParam(groupBy, "groupBy");
+
+            ServiceResponseCollection<FindItemResponse<Item>> responses = await this.FindItemsAsync<Item>(
                 new FolderId[] { parentFolderId },
                 null, /* searchFilter */
                 null, /* queryString */
@@ -1175,6 +2073,33 @@ namespace Microsoft.Exchange.WebServices.Data
         /// <summary>
         /// Obtains a grouped list of items by searching the contents of a specific folder. Calling this method results in a call to EWS.
         /// </summary>
+        /// <param name="parentFolderId">The Id of the folder in which to search for items.</param>
+        /// <param name="searchFilter">The search filter. Available search filter classes
+        /// include SearchFilter.IsEqualTo, SearchFilter.ContainsSubstring and 
+        /// SearchFilter.SearchFilterCollection</param>
+        /// <param name="view">The view controlling the number of items returned.</param>
+        /// <param name="groupBy">The group by clause.</param>
+        /// <typeparam name="TItem">Type of item.</typeparam>
+        /// <returns>A list of items containing the contents of the specified folder.</returns>
+        internal async System.Threading.Tasks.Task<ServiceResponseCollection<FindItemResponse<TItem>>> FindItemsAsync<TItem>(
+            FolderId parentFolderId,
+            SearchFilter searchFilter,
+            ViewBase view,
+            Grouping groupBy)
+            where TItem : Item
+        {
+            return await this.FindItemsAsync<TItem>(
+                new FolderId[] { parentFolderId },
+                searchFilter,
+                null, /* queryString */
+                view,
+                groupBy,
+                ServiceErrorHandling.ThrowOnError);
+        }
+
+        /// <summary>
+        /// Obtains a grouped list of items by searching the contents of a specific folder. Calling this method results in a call to EWS.
+        /// </summary>
         /// <param name="parentFolderName">The name of the folder in which to search for items.</param>
         /// <param name="queryString">query string to be used for indexed search</param>
         /// <param name="view">The view controlling the number of items returned.</param>
@@ -1199,6 +2124,29 @@ namespace Microsoft.Exchange.WebServices.Data
         /// Obtains a grouped list of items by searching the contents of a specific folder. Calling this method results in a call to EWS.
         /// </summary>
         /// <param name="parentFolderName">The name of the folder in which to search for items.</param>
+        /// <param name="queryString">query string to be used for indexed search</param>
+        /// <param name="view">The view controlling the number of items returned.</param>
+        /// <param name="groupBy">The group by clause.</param>
+        /// <returns>A collection of grouped items representing the contents of the specified.</returns>
+        public async System.Threading.Tasks.Task<GroupedFindItemsResults<Item>> FindItemsAsync(
+            WellKnownFolderName parentFolderName,
+            string queryString,
+            ViewBase view,
+            Grouping groupBy)
+        {
+            EwsUtilities.ValidateParam(groupBy, "groupBy");
+
+            return await this.FindItemsAsync(
+                new FolderId(parentFolderName),
+                queryString,
+                view,
+                groupBy);
+        }
+
+        /// <summary>
+        /// Obtains a grouped list of items by searching the contents of a specific folder. Calling this method results in a call to EWS.
+        /// </summary>
+        /// <param name="parentFolderName">The name of the folder in which to search for items.</param>
         /// <param name="searchFilter">The search filter. Available search filter classes
         /// include SearchFilter.IsEqualTo, SearchFilter.ContainsSubstring and 
         /// SearchFilter.SearchFilterCollection</param>
@@ -1212,6 +2160,29 @@ namespace Microsoft.Exchange.WebServices.Data
             Grouping groupBy)
         {
             return this.FindItems(
+                new FolderId(parentFolderName),
+                searchFilter,
+                view,
+                groupBy);
+        }
+
+        /// <summary>
+        /// Obtains a grouped list of items by searching the contents of a specific folder. Calling this method results in a call to EWS.
+        /// </summary>
+        /// <param name="parentFolderName">The name of the folder in which to search for items.</param>
+        /// <param name="searchFilter">The search filter. Available search filter classes
+        /// include SearchFilter.IsEqualTo, SearchFilter.ContainsSubstring and 
+        /// SearchFilter.SearchFilterCollection</param>
+        /// <param name="view">The view controlling the number of items returned.</param>
+        /// <param name="groupBy">The group by clause.</param>
+        /// <returns>A collection of grouped items representing the contents of the specified.</returns>
+        public async System.Threading.Tasks.Task<GroupedFindItemsResults<Item>> FindItemsAsync(
+            WellKnownFolderName parentFolderName,
+            SearchFilter searchFilter,
+            ViewBase view,
+            Grouping groupBy)
+        {
+            return await this.FindItemsAsync(
                 new FolderId(parentFolderName),
                 searchFilter,
                 view,
@@ -1270,6 +2241,23 @@ namespace Microsoft.Exchange.WebServices.Data
         /// </summary>
         /// <param name="items">The items to load the properties of.</param>
         /// <param name="propertySet">The set of properties to load.</param>
+        /// <returns>A ServiceResponseCollection providing results for each of the specified items.</returns>
+        public async System.Threading.Tasks.Task<ServiceResponseCollection<ServiceResponse>> LoadPropertiesForItemsAsync(IEnumerable<Item> items, PropertySet propertySet)
+        {
+            EwsUtilities.ValidateParamCollection(items, "items");
+            EwsUtilities.ValidateParam(propertySet, "propertySet");
+
+            return await this.InternalLoadPropertiesForItemsAsync(
+                items,
+                propertySet,
+                ServiceErrorHandling.ReturnErrors);
+        }
+
+        /// <summary>
+        /// Loads the properties of multiple items in a single call to EWS.
+        /// </summary>
+        /// <param name="items">The items to load the properties of.</param>
+        /// <param name="propertySet">The set of properties to load.</param>
         /// <param name="errorHandling">Indicates the type of error handling should be done.</param>
         /// <returns>A ServiceResponseCollection providing results for each of the specified items.</returns>
         internal ServiceResponseCollection<ServiceResponse> InternalLoadPropertiesForItems(
@@ -1283,6 +2271,26 @@ namespace Microsoft.Exchange.WebServices.Data
             request.PropertySet = propertySet;
 
             return request.Execute();
+        }
+
+        /// <summary>
+        /// Loads the properties of multiple items in a single call to EWS.
+        /// </summary>
+        /// <param name="items">The items to load the properties of.</param>
+        /// <param name="propertySet">The set of properties to load.</param>
+        /// <param name="errorHandling">Indicates the type of error handling should be done.</param>
+        /// <returns>A ServiceResponseCollection providing results for each of the specified items.</returns>
+        internal async System.Threading.Tasks.Task<ServiceResponseCollection<ServiceResponse>> InternalLoadPropertiesForItemsAsync(
+            IEnumerable<Item> items,
+            PropertySet propertySet,
+            ServiceErrorHandling errorHandling)
+        {
+            GetItemRequestForLoad request = new GetItemRequestForLoad(this, errorHandling);
+
+            request.ItemIds.AddRange(items);
+            request.PropertySet = propertySet;
+
+            return await request.ExecuteAsync();
         }
 
         /// <summary>
@@ -1306,6 +2314,29 @@ namespace Microsoft.Exchange.WebServices.Data
             request.AnchorMailbox = anchorMailbox;
 
             return request.Execute();
+        }
+
+        /// <summary>
+        /// Binds to multiple items in a single call to EWS.
+        /// </summary>
+        /// <param name="itemIds">The Ids of the items to bind to.</param>
+        /// <param name="propertySet">The set of properties to load.</param>
+        /// <param name="anchorMailbox">The SmtpAddress of mailbox that hosts all items we need to bind to</param>
+        /// <param name="errorHandling">Type of error handling to perform.</param>
+        /// <returns>A ServiceResponseCollection providing results for each of the specified item Ids.</returns>
+        private async System.Threading.Tasks.Task<ServiceResponseCollection<GetItemResponse>> InternalBindToItemsAsync(
+            IEnumerable<ItemId> itemIds,
+            PropertySet propertySet,
+            string anchorMailbox,
+            ServiceErrorHandling errorHandling)
+        {
+            GetItemRequest request = new GetItemRequest(this, errorHandling);
+
+            request.ItemIds.AddRange(itemIds);
+            request.PropertySet = propertySet;
+            request.AnchorMailbox = anchorMailbox;
+
+            return await request.ExecuteAsync();
         }
 
         /// <summary>
@@ -1376,6 +2407,26 @@ namespace Microsoft.Exchange.WebServices.Data
         /// <summary>
         /// Binds to item.
         /// </summary>
+        /// <param name="itemId">The item id.</param>
+        /// <param name="propertySet">The property set.</param>
+        /// <returns>Item.</returns>
+        internal async System.Threading.Tasks.Task<Item> BindToItemAsync(ItemId itemId, PropertySet propertySet)
+        {
+            EwsUtilities.ValidateParam(itemId, "itemId");
+            EwsUtilities.ValidateParam(propertySet, "propertySet");
+
+            ServiceResponseCollection<GetItemResponse> responses = await this.InternalBindToItemsAsync(
+                new ItemId[] { itemId },
+                propertySet,
+                null, /* anchorMailbox */
+                ServiceErrorHandling.ThrowOnError);
+
+            return responses[0].Item;
+        }
+
+        /// <summary>
+        /// Binds to item.
+        /// </summary>
         /// <typeparam name="TItem">The type of the item.</typeparam>
         /// <param name="itemId">The item id.</param>
         /// <param name="propertySet">The property set.</param>
@@ -1384,6 +2435,32 @@ namespace Microsoft.Exchange.WebServices.Data
             where TItem : Item
         {
             Item result = this.BindToItem(itemId, propertySet);
+
+            if (result is TItem)
+            {
+                return (TItem)result;
+            }
+            else
+            {
+                throw new ServiceLocalException(
+                    string.Format(
+                        Strings.ItemTypeNotCompatible,
+                        result.GetType().Name,
+                        typeof(TItem).Name));
+            }
+        }
+
+        /// <summary>
+        /// Binds to item.
+        /// </summary>
+        /// <typeparam name="TItem">The type of the item.</typeparam>
+        /// <param name="itemId">The item id.</param>
+        /// <param name="propertySet">The property set.</param>
+        /// <returns>Item</returns>
+        internal async System.Threading.Tasks.Task<TItem> BindToItemAsync<TItem>(ItemId itemId, PropertySet propertySet)
+            where TItem : Item
+        {
+            Item result = await this.BindToItemAsync(itemId, propertySet);
 
             if (result is TItem)
             {
@@ -1435,6 +2512,35 @@ namespace Microsoft.Exchange.WebServices.Data
         /// <param name="deleteMode">The deletion mode.</param>
         /// <param name="sendCancellationsMode">Indicates whether cancellation messages should be sent. Required if any of the item Ids represents an Appointment.</param>
         /// <param name="affectedTaskOccurrences">Indicates which instance of a recurring task should be deleted. Required if any of the item Ids represents a Task.</param>
+        /// <param name="errorHandling">Type of error handling to perform.</param>
+        /// <param name="suppressReadReceipts">Whether to suppress read receipts</param>
+        /// <returns>A ServiceResponseCollection providing deletion results for each of the specified item Ids.</returns>
+        private async System.Threading.Tasks.Task<ServiceResponseCollection<ServiceResponse>> InternalDeleteItemsAsync(
+            IEnumerable<ItemId> itemIds,
+            DeleteMode deleteMode,
+            SendCancellationsMode? sendCancellationsMode,
+            AffectedTaskOccurrence? affectedTaskOccurrences,
+            ServiceErrorHandling errorHandling,
+            bool suppressReadReceipts)
+        {
+            DeleteItemRequest request = new DeleteItemRequest(this, errorHandling);
+
+            request.ItemIds.AddRange(itemIds);
+            request.DeleteMode = deleteMode;
+            request.SendCancellationsMode = sendCancellationsMode;
+            request.AffectedTaskOccurrences = affectedTaskOccurrences;
+            request.SuppressReadReceipts = suppressReadReceipts;
+
+            return await request.ExecuteAsync();
+        }
+
+        /// <summary>
+        /// Deletes multiple items in a single call to EWS.
+        /// </summary>
+        /// <param name="itemIds">The Ids of the items to delete.</param>
+        /// <param name="deleteMode">The deletion mode.</param>
+        /// <param name="sendCancellationsMode">Indicates whether cancellation messages should be sent. Required if any of the item Ids represents an Appointment.</param>
+        /// <param name="affectedTaskOccurrences">Indicates which instance of a recurring task should be deleted. Required if any of the item Ids represents a Task.</param>
         /// <returns>A ServiceResponseCollection providing deletion results for each of the specified item Ids.</returns>
         public ServiceResponseCollection<ServiceResponse> DeleteItems(
             IEnumerable<ItemId> itemIds,
@@ -1443,6 +2549,24 @@ namespace Microsoft.Exchange.WebServices.Data
             AffectedTaskOccurrence? affectedTaskOccurrences)
         {
             return this.DeleteItems(itemIds, deleteMode, sendCancellationsMode, affectedTaskOccurrences, false);
+        }
+
+
+        /// <summary>
+        /// Deletes multiple items in a single call to EWS.
+        /// </summary>
+        /// <param name="itemIds">The Ids of the items to delete.</param>
+        /// <param name="deleteMode">The deletion mode.</param>
+        /// <param name="sendCancellationsMode">Indicates whether cancellation messages should be sent. Required if any of the item Ids represents an Appointment.</param>
+        /// <param name="affectedTaskOccurrences">Indicates which instance of a recurring task should be deleted. Required if any of the item Ids represents a Task.</param>
+        /// <returns>A ServiceResponseCollection providing deletion results for each of the specified item Ids.</returns>
+        public async System.Threading.Tasks.Task<ServiceResponseCollection<ServiceResponse>> DeleteItemsAsync(
+            IEnumerable<ItemId> itemIds,
+            DeleteMode deleteMode,
+            SendCancellationsMode? sendCancellationsMode,
+            AffectedTaskOccurrence? affectedTaskOccurrences)
+        {
+            return await this.DeleteItemsAsync(itemIds, deleteMode, sendCancellationsMode, affectedTaskOccurrences, false);
         }
 
         /// <summary>
@@ -1464,6 +2588,33 @@ namespace Microsoft.Exchange.WebServices.Data
             EwsUtilities.ValidateParamCollection(itemIds, "itemIds");
 
             return this.InternalDeleteItems(
+                itemIds,
+                deleteMode,
+                sendCancellationsMode,
+                affectedTaskOccurrences,
+                ServiceErrorHandling.ReturnErrors,
+                suppressReadReceipt);
+        }
+
+        /// <summary>
+        /// Deletes multiple items in a single call to EWS.
+        /// </summary>
+        /// <param name="itemIds">The Ids of the items to delete.</param>
+        /// <param name="deleteMode">The deletion mode.</param>
+        /// <param name="sendCancellationsMode">Indicates whether cancellation messages should be sent. Required if any of the item Ids represents an Appointment.</param>
+        /// <param name="affectedTaskOccurrences">Indicates which instance of a recurring task should be deleted. Required if any of the item Ids represents a Task.</param>
+        /// <returns>A ServiceResponseCollection providing deletion results for each of the specified item Ids.</returns>
+        /// <param name="suppressReadReceipt">Whether to suppress read receipts</param>
+        public async System.Threading.Tasks.Task<ServiceResponseCollection<ServiceResponse>> DeleteItemsAsync(
+            IEnumerable<ItemId> itemIds,
+            DeleteMode deleteMode,
+            SendCancellationsMode? sendCancellationsMode,
+            AffectedTaskOccurrence? affectedTaskOccurrences,
+            bool suppressReadReceipt)
+        {
+            EwsUtilities.ValidateParamCollection(itemIds, "itemIds");
+
+            return await this.InternalDeleteItemsAsync(
                 itemIds,
                 deleteMode,
                 sendCancellationsMode,
@@ -1495,6 +2646,22 @@ namespace Microsoft.Exchange.WebServices.Data
         /// <param name="deleteMode">The deletion mode.</param>
         /// <param name="sendCancellationsMode">Indicates whether cancellation messages should be sent. Required if the item Id represents an Appointment.</param>
         /// <param name="affectedTaskOccurrences">Indicates which instance of a recurring task should be deleted. Required if item Id represents a Task.</param>
+        internal async System.Threading.Tasks.Task DeleteItemAsync(
+            ItemId itemId,
+            DeleteMode deleteMode,
+            SendCancellationsMode? sendCancellationsMode,
+            AffectedTaskOccurrence? affectedTaskOccurrences)
+        {
+            await this.DeleteItemAsync(itemId, deleteMode, sendCancellationsMode, affectedTaskOccurrences, false);
+        }
+
+        /// <summary>
+        /// Deletes an item. Calling this method results in a call to EWS.
+        /// </summary>
+        /// <param name="itemId">The Id of the item to delete.</param>
+        /// <param name="deleteMode">The deletion mode.</param>
+        /// <param name="sendCancellationsMode">Indicates whether cancellation messages should be sent. Required if the item Id represents an Appointment.</param>
+        /// <param name="affectedTaskOccurrences">Indicates which instance of a recurring task should be deleted. Required if item Id represents a Task.</param>
         /// <param name="suppressReadReceipts">Whether to suppress read receipts</param>
         internal void DeleteItem(
             ItemId itemId,
@@ -1506,6 +2673,32 @@ namespace Microsoft.Exchange.WebServices.Data
             EwsUtilities.ValidateParam(itemId, "itemId");
 
             this.InternalDeleteItems(
+                new ItemId[] { itemId },
+                deleteMode,
+                sendCancellationsMode,
+                affectedTaskOccurrences,
+                ServiceErrorHandling.ThrowOnError,
+                suppressReadReceipts);
+        }
+
+        /// <summary>
+        /// Deletes an item. Calling this method results in a call to EWS.
+        /// </summary>
+        /// <param name="itemId">The Id of the item to delete.</param>
+        /// <param name="deleteMode">The deletion mode.</param>
+        /// <param name="sendCancellationsMode">Indicates whether cancellation messages should be sent. Required if the item Id represents an Appointment.</param>
+        /// <param name="affectedTaskOccurrences">Indicates which instance of a recurring task should be deleted. Required if item Id represents a Task.</param>
+        /// <param name="suppressReadReceipts">Whether to suppress read receipts</param>
+        internal async System.Threading.Tasks.Task DeleteItemAsync(
+            ItemId itemId,
+            DeleteMode deleteMode,
+            SendCancellationsMode? sendCancellationsMode,
+            AffectedTaskOccurrence? affectedTaskOccurrences,
+            bool suppressReadReceipts)
+        {
+            EwsUtilities.ValidateParam(itemId, "itemId");
+
+            await this.InternalDeleteItemsAsync(
                 new ItemId[] { itemId },
                 deleteMode,
                 sendCancellationsMode,
@@ -1811,6 +3004,33 @@ namespace Microsoft.Exchange.WebServices.Data
         }
 
         /// <summary>
+        /// Gets an attachment.
+        /// </summary>
+        /// <param name="attachments">The attachments.</param>
+        /// <param name="bodyType">Type of the body.</param>
+        /// <param name="additionalProperties">The additional properties.</param>
+        /// <param name="errorHandling">Type of error handling to perform.</param>
+        /// <returns>Service response collection.</returns>
+        private async System.Threading.Tasks.Task<ServiceResponseCollection<GetAttachmentResponse>> InternalGetAttachmentsAsync(
+            IEnumerable<Attachment> attachments,
+            BodyType? bodyType,
+            IEnumerable<PropertyDefinitionBase> additionalProperties,
+            ServiceErrorHandling errorHandling)
+        {
+            GetAttachmentRequest request = new GetAttachmentRequest(this, errorHandling);
+
+            request.Attachments.AddRange(attachments);
+            request.BodyType = bodyType;
+
+            if (additionalProperties != null)
+            {
+                request.AdditionalProperties.AddRange(additionalProperties);
+            }
+
+            return await request.ExecuteAsync();
+        }
+
+        /// <summary>
         /// Gets attachments.
         /// </summary>
         /// <param name="attachments">The attachments.</param>
@@ -1823,6 +3043,25 @@ namespace Microsoft.Exchange.WebServices.Data
             IEnumerable<PropertyDefinitionBase> additionalProperties)
         {
             return this.InternalGetAttachments(
+                attachments,
+                bodyType,
+                additionalProperties,
+                ServiceErrorHandling.ReturnErrors);
+        }
+
+        /// <summary>
+        /// Gets attachments.
+        /// </summary>
+        /// <param name="attachments">The attachments.</param>
+        /// <param name="bodyType">Type of the body.</param>
+        /// <param name="additionalProperties">The additional properties.</param>
+        /// <returns>Service response collection.</returns>
+        public async System.Threading.Tasks.Task<ServiceResponseCollection<GetAttachmentResponse>> GetAttachmentsAsync(
+            Attachment[] attachments,
+            BodyType? bodyType,
+            IEnumerable<PropertyDefinitionBase> additionalProperties)
+        {
+            return await this.InternalGetAttachmentsAsync(
                 attachments,
                 bodyType,
                 additionalProperties,
@@ -1855,6 +3094,31 @@ namespace Microsoft.Exchange.WebServices.Data
         }
 
         /// <summary>
+        /// Gets attachments.
+        /// </summary>
+        /// <param name="attachmentIds">The attachment ids.</param>
+        /// <param name="bodyType">Type of the body.</param>
+        /// <param name="additionalProperties">The additional properties.</param>
+        /// <returns>Service response collection.</returns>
+        public async System.Threading.Tasks.Task<ServiceResponseCollection<GetAttachmentResponse>> GetAttachmentsAsync(
+            string[] attachmentIds,
+            BodyType? bodyType,
+            IEnumerable<PropertyDefinitionBase> additionalProperties)
+        {
+            GetAttachmentRequest request = new GetAttachmentRequest(this, ServiceErrorHandling.ReturnErrors);
+
+            request.AttachmentIds.AddRange(attachmentIds);
+            request.BodyType = bodyType;
+
+            if (additionalProperties != null)
+            {
+                request.AdditionalProperties.AddRange(additionalProperties);
+            }
+
+            return await request.ExecuteAsync();
+        }
+
+        /// <summary>
         /// Gets an attachment.
         /// </summary>
         /// <param name="attachment">The attachment.</param>
@@ -1866,6 +3130,24 @@ namespace Microsoft.Exchange.WebServices.Data
             IEnumerable<PropertyDefinitionBase> additionalProperties)
         {
             this.InternalGetAttachments(
+                new Attachment[] { attachment },
+                bodyType,
+                additionalProperties,
+                ServiceErrorHandling.ThrowOnError);
+        }
+
+        /// <summary>
+        /// Gets an attachment.
+        /// </summary>
+        /// <param name="attachment">The attachment.</param>
+        /// <param name="bodyType">Type of the body.</param>
+        /// <param name="additionalProperties">The additional properties.</param>
+        internal async System.Threading.Tasks.Task GetAttachmentAsync(
+            Attachment attachment,
+            BodyType? bodyType,
+            IEnumerable<PropertyDefinitionBase> additionalProperties)
+        {
+            await this.InternalGetAttachmentsAsync(
                 new Attachment[] { attachment },
                 bodyType,
                 additionalProperties,
@@ -1891,6 +3173,24 @@ namespace Microsoft.Exchange.WebServices.Data
         }
 
         /// <summary>
+        /// Creates attachments.
+        /// </summary>
+        /// <param name="parentItemId">The parent item id.</param>
+        /// <param name="attachments">The attachments.</param>
+        /// <returns>Service response collection.</returns>
+        internal async System.Threading.Tasks.Task<ServiceResponseCollection<CreateAttachmentResponse>> CreateAttachmentsAsync(
+            string parentItemId,
+            IEnumerable<Attachment> attachments)
+        {
+            CreateAttachmentRequest request = new CreateAttachmentRequest(this, ServiceErrorHandling.ReturnErrors);
+
+            request.ParentItemId = parentItemId;
+            request.Attachments.AddRange(attachments);
+
+            return await request.ExecuteAsync();
+        }
+
+        /// <summary>
         /// Deletes attachments.
         /// </summary>
         /// <param name="attachments">The attachments.</param>
@@ -1902,6 +3202,20 @@ namespace Microsoft.Exchange.WebServices.Data
             request.Attachments.AddRange(attachments);
 
             return request.Execute();
+        }
+
+        /// <summary>
+        /// Deletes attachments.
+        /// </summary>
+        /// <param name="attachments">The attachments.</param>
+        /// <returns>Service response collection.</returns>
+        internal async System.Threading.Tasks.Task<ServiceResponseCollection<DeleteAttachmentResponse>> DeleteAttachmentsAsync(IEnumerable<Attachment> attachments)
+        {
+            DeleteAttachmentRequest request = new DeleteAttachmentRequest(this, ServiceErrorHandling.ReturnErrors);
+
+            request.Attachments.AddRange(attachments);
+
+            return await request.ExecuteAsync();
         }
 
         #endregion
@@ -2259,6 +3573,15 @@ namespace Microsoft.Exchange.WebServices.Data
         internal void Unsubscribe(string subscriptionId)
         {
             this.BuildUnsubscribeRequest(subscriptionId).Execute();
+        }
+
+        /// <summary>
+        /// Unsubscribes async from a subscription. Calling this method results in a call to EWS.
+        /// </summary>
+        /// <param name="subscriptionId">The Id of the pull subscription to unsubscribe from.</param>
+        internal async System.Threading.Tasks.Task UnsubscribeAsync(string subscriptionId)
+        {
+            await this.BuildUnsubscribeRequest(subscriptionId).ExecuteAsync();
         }
 
         /// <summary>
@@ -2810,6 +4133,26 @@ namespace Microsoft.Exchange.WebServices.Data
         }
 
         /// <summary>
+        /// Subscribes asynchronously to streaming notifications. Calling this method results in a call to EWS.
+        /// </summary>
+        /// <param name="folderIds">The Ids of the folder to subscribe to.</param>
+        /// <param name="eventTypes">The event types to subscribe to.</param>
+        /// <returns>A StreamingSubscription representing the new subscription.</returns>
+        public async System.Threading.Tasks.Task<StreamingSubscription> SubscribeToStreamingNotificationsAsync(
+            IEnumerable<FolderId> folderIds,
+            params EventType[] eventTypes)
+        {
+            EwsUtilities.ValidateMethodVersion(
+                this,
+                ExchangeVersion.Exchange2010_SP1,
+                "SubscribeToStreamingNotifications");
+
+            EwsUtilities.ValidateParamCollection(folderIds, "folderIds");
+            var res = await this.BuildSubscribeToStreamingNotificationsRequest(folderIds, eventTypes).ExecuteAsync();
+            return res[0].Subscription;
+        }
+
+        /// <summary>
         /// Begins an asynchronous request to subscribe to streaming notifications. Calling this method results in a call to EWS.
         /// </summary>
         /// <param name="callback">The AsyncCallback delegate.</param>
@@ -2847,6 +4190,23 @@ namespace Microsoft.Exchange.WebServices.Data
                 "SubscribeToStreamingNotificationsOnAllFolders");
 
             return this.BuildSubscribeToStreamingNotificationsRequest(null, eventTypes).Execute()[0].Subscription;
+        }
+
+        /// <summary>
+        /// Subscribes to streaming notifications on all folders in the authenticated user's mailbox. Calling this method results in a call to EWS.
+        /// </summary>
+        /// <param name="eventTypes">The event types to subscribe to.</param>
+        /// <returns>A StreamingSubscription representing the new subscription.</returns>
+        public async System.Threading.Tasks.Task<StreamingSubscription> SubscribeToStreamingNotificationsOnAllFoldersAsync(
+            params EventType[] eventTypes)
+        {
+            EwsUtilities.ValidateMethodVersion(
+                this,
+                ExchangeVersion.Exchange2010_SP1,
+                "SubscribeToStreamingNotificationsOnAllFolders");
+
+            var res = await this.BuildSubscribeToStreamingNotificationsRequest(null, eventTypes).ExecuteAsync();
+            return res[0].Subscription;
         }
 
         /// <summary>
@@ -2970,6 +4330,37 @@ namespace Microsoft.Exchange.WebServices.Data
                 numberOfDays,
                 syncScope,
                 syncState).Execute()[0].Changes;
+        }
+
+        /// <summary>
+        /// Synchronizes asynchronously the items of a specific folder. Calling this method results in a call to EWS.
+        /// </summary>
+        /// <param name="syncFolderId">The Id of the folder containing the items to synchronize with.</param>
+        /// <param name="propertySet">The set of properties to retrieve for synchronized items.</param>
+        /// <param name="ignoredItemIds">The optional list of item Ids that should be ignored.</param>
+        /// <param name="maxChangesReturned">The maximum number of changes that should be returned.</param>
+        /// <param name="numberOfDays">Limit the changes returned to this many days ago; 0 means no limit.</param>
+        /// <param name="syncScope">The sync scope identifying items to include in the ChangeCollection.</param>
+        /// <param name="syncState">The optional sync state representing the point in time when to start the synchronization.</param>
+        /// <returns>A ChangeCollection containing a list of changes that occurred in the specified folder.</returns>
+        public async System.Threading.Tasks.Task<ChangeCollection<ItemChange>> SyncFolderItemsAsync(
+            FolderId syncFolderId,
+            PropertySet propertySet,
+            IEnumerable<ItemId> ignoredItemIds,
+            int maxChangesReturned,
+            int numberOfDays,
+            SyncFolderItemsScope syncScope,
+            string syncState)
+        {
+            var res = await this.BuildSyncFolderItemsRequest(
+                syncFolderId,
+                propertySet,
+                ignoredItemIds,
+                maxChangesReturned,
+                numberOfDays,
+                syncScope,
+                syncState).ExecuteAsync();
+            return res[0].Changes;
         }
 
         /// <summary>
@@ -3110,6 +4501,25 @@ namespace Microsoft.Exchange.WebServices.Data
         }
 
         /// <summary>
+        /// Synchronizes the sub-folders of a specific folder. Calling this method results in a call to EWS.
+        /// </summary>
+        /// <param name="syncFolderId">The Id of the folder containing the items to synchronize with. A null value indicates the root folder of the mailbox.</param>
+        /// <param name="propertySet">The set of properties to retrieve for synchronized items.</param>
+        /// <param name="syncState">The optional sync state representing the point in time when to start the synchronization.</param>
+        /// <returns>A ChangeCollection containing a list of changes that occurred in the specified folder.</returns>
+        public async System.Threading.Tasks.Task<ChangeCollection<FolderChange>> SyncFolderHierarchyAsync(
+            FolderId syncFolderId,
+            PropertySet propertySet,
+            string syncState)
+        {
+            var res = await this.BuildSyncFolderHierarchyRequest(
+                syncFolderId,
+                propertySet,
+                syncState).ExecuteAsync();
+            return res[0].Changes;
+        }
+
+        /// <summary>
         /// Begins an asynchronous request to synchronize the sub-folders of a specific folder. Calling this method results in a call to EWS.
         /// </summary>
         /// <param name="callback">The AsyncCallback delegate.</param>
@@ -3224,6 +4634,22 @@ namespace Microsoft.Exchange.WebServices.Data
         }
 
         /// <summary>
+        /// Gets Out asynchronously of Office (OOF) settings for a specific user. Calling this method results in a call to EWS.
+        /// </summary>
+        /// <param name="smtpAddress">The SMTP address of the user for which to retrieve OOF settings.</param>
+        /// <returns>An OofSettings instance containing OOF information for the specified user.</returns>
+        public async System.Threading.Tasks.Task<OofSettings> GetUserOofSettingsAsync(string smtpAddress)
+        {
+            EwsUtilities.ValidateParam(smtpAddress, "smtpAddress");
+
+            GetUserOofSettingsRequest request = new GetUserOofSettingsRequest(this);
+
+            request.SmtpAddress = smtpAddress;
+            var result = await request.ExecuteAsync();
+            return result.OofSettings;
+        }
+
+        /// <summary>
         /// Sets the Out of Office (OOF) settings for a specific mailbox. Calling this method results in a call to EWS.
         /// </summary>
         /// <param name="smtpAddress">The SMTP address of the user for which to set OOF settings.</param>
@@ -3240,6 +4666,43 @@ namespace Microsoft.Exchange.WebServices.Data
 
             request.Execute();
         }
+
+        #region MailTips operations
+        /// <summary>
+        /// Gets MailTips for given users. Calling this method results in a call to EWS.
+        /// </summary>
+        /// <param name="sendingAs">E-mail address that a user is trying to send as.</param>
+        /// <param name="recipients">Collection of recipients that would receive a copy of the message.</param>
+        /// <param name="requested">Mail tips requested from the service.</param>
+        /// <returns>List of GetMailTips results.</returns>
+        public GetMailTipsResults GetMailTips(string sendingAs, Mailbox[] recipients, MailTipsRequested requested)
+        {
+            GetMailTipsRequest request = new GetMailTipsRequest(this);
+            request.SendingAs = sendingAs;
+            request.Recipients = recipients;
+            request.MailTipsRequested = requested;
+ 
+            return request.Execute();
+        }
+
+        /// <summary>
+        /// Gets MailTips for given users. Calling this method results in a call to EWS.
+        /// </summary>
+        /// <param name="sendingAs">E-mail address that a user is trying to send as.</param>
+        /// <param name="recipients">Collection of recipients that would receive a copy of the message.</param>
+        /// <param name="requested">Mail tips requested from the service.</param>
+        /// <returns>List of GetMailTips results.</returns>
+        public async System.Threading.Tasks.Task<GetMailTipsResults> GetMailTipsAsync(string sendingAs, Mailbox[] recipients, MailTipsRequested requested)
+        {
+            GetMailTipsRequest request = new GetMailTipsRequest(this);
+            request.SendingAs = sendingAs;
+            request.Recipients = recipients;
+            request.MailTipsRequested = requested;
+
+            return await request.ExecuteAsync();
+        }
+        #endregion
+
 
         /// <summary>
         /// Gets detailed information about the availability of a set of users, rooms, and resources within a

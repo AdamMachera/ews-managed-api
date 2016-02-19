@@ -158,6 +158,62 @@ namespace Microsoft.Exchange.WebServices.Data
         }
 
         /// <summary>
+        /// Send message.
+        /// </summary>
+        /// <param name="parentFolderId">The parent folder id.</param>
+        /// <param name="messageDisposition">The message disposition.</param>
+        private async System.Threading.Tasks.Task InternalSendAsync(FolderId parentFolderId, MessageDisposition messageDisposition)
+        {
+            this.ThrowIfThisIsAttachment();
+
+            if (this.IsNew)
+            {
+                if ((this.Attachments.Count == 0) || (messageDisposition == MessageDisposition.SaveOnly))
+                {
+                    await this.InternalCreateAsync(
+                        parentFolderId,
+                        messageDisposition,
+                        null);
+                }
+                else
+                {
+                    // If the message has attachments, save as a draft (and add attachments) before sending.
+                    await this.InternalCreateAsync(
+                        null,                           // null means use the Drafts folder in the mailbox of the authenticated user.
+                        MessageDisposition.SaveOnly,
+                        null);
+
+                    await this.Service.SendItemAsync(this, parentFolderId);
+                }
+            }
+            else
+            {
+                // Regardless of whether item is dirty or not, if it has unprocessed
+                // attachment changes, process them now.
+
+                // Validate and save attachments before sending.
+                if (this.HasUnprocessedAttachmentChanges())
+                {
+                    this.Attachments.Validate();
+                    await this.Attachments.SaveAsync();
+                }
+
+                if (this.PropertyBag.GetIsUpdateCallNecessary())
+                {
+                    await this.InternalUpdateAsync(
+                        parentFolderId,
+                        ConflictResolutionMode.AutoResolve,
+                        messageDisposition,
+                        null);
+                }
+                else
+                {
+                    await this.Service.SendItemAsync(this, parentFolderId);
+                }
+            }
+        }
+
+        /// <summary>
         /// Creates a reply response to the message.
         /// </summary>
         /// <param name="replyAll">Indicates whether the reply should go to all of the original recipients of the message.</param>
@@ -230,6 +286,14 @@ namespace Microsoft.Exchange.WebServices.Data
         }
 
         /// <summary>
+        /// Sends async this e-mail message. Calling this method results in at least one call to EWS.
+        /// </summary>
+        public async System.Threading.Tasks.Task SendAsync()
+        {
+            await this.InternalSendAsync(null, MessageDisposition.SendOnly);
+        }
+
+        /// <summary>
         /// Sends this e-mail message and saves a copy of it in the specified folder. SendAndSaveCopy does not work if the
         /// message has unsaved attachments. In that case, the message must first be saved and then sent. Calling this method
         /// results in a call to EWS.
@@ -240,6 +304,19 @@ namespace Microsoft.Exchange.WebServices.Data
             EwsUtilities.ValidateParam(destinationFolderId, "destinationFolderId");
 
             this.InternalSend(destinationFolderId, MessageDisposition.SendAndSaveCopy);
+        }
+
+        /// <summary>
+        /// Sends async this e-mail message and saves a copy of it in the specified folder. SendAndSaveCopy does not work if the
+        /// message has unsaved attachments. In that case, the message must first be saved and then sent. Calling this method
+        /// results in a call to EWS.
+        /// </summary>
+        /// <param name="destinationFolderId">The Id of the folder in which to save the copy.</param>
+        public async System.Threading.Tasks.Task SendAndSaveCopyAsync(FolderId destinationFolderId)
+        {
+            EwsUtilities.ValidateParam(destinationFolderId, "destinationFolderId");
+
+            await this.InternalSendAsync(destinationFolderId, MessageDisposition.SendAndSaveCopy);
         }
 
         /// <summary>
@@ -254,6 +331,17 @@ namespace Microsoft.Exchange.WebServices.Data
         }
 
         /// <summary>
+        /// Sends async this e-mail message and saves a copy of it in the specified folder. SendAndSaveCopy does not work if the
+        /// message has unsaved attachments. In that case, the message must first be saved and then sent. Calling this method
+        /// results in a call to EWS.
+        /// </summary>
+        /// <param name="destinationFolderName">The name of the folder in which to save the copy.</param>
+        public async System.Threading.Tasks.Task SendAndSaveCopyAsync(WellKnownFolderName destinationFolderName)
+        {
+            await this.InternalSendAsync(new FolderId(destinationFolderName), MessageDisposition.SendAndSaveCopy);
+        }
+
+        /// <summary>
         /// Sends this e-mail message and saves a copy of it in the Sent Items folder. SendAndSaveCopy does not work if the
         /// message has unsaved attachments. In that case, the message must first be saved and then sent. Calling this method
         /// results in a call to EWS.
@@ -264,6 +352,16 @@ namespace Microsoft.Exchange.WebServices.Data
         }
 
         /// <summary>
+        /// Sends async this e-mail message and saves a copy of it in the Sent Items folder. SendAndSaveCopy does not work if the
+        /// message has unsaved attachments. In that case, the message must first be saved and then sent. Calling this method
+        /// results in a call to EWS.
+        /// </summary>
+        public async System.Threading.Tasks.Task SendAndSaveCopyAsync()
+        {
+            await this.InternalSendAsync(new FolderId(WellKnownFolderName.SentItems), MessageDisposition.SendAndSaveCopy);
+        }
+
+        /// <summary>
         /// Suppresses the read receipt on the message. Calling this method results in a call to EWS.
         /// </summary>
         public void SuppressReadReceipt()
@@ -271,6 +369,16 @@ namespace Microsoft.Exchange.WebServices.Data
             this.ThrowIfThisIsNew();
 
             new SuppressReadReceipt(this).InternalCreate(null, null);
+        }
+
+        /// <summary>
+        /// Suppresses async the read receipt on the message. Calling this method results in a call to EWS.
+        /// </summary>
+        public async System.Threading.Tasks.Task SuppressReadReceiptAsync()
+        {
+            this.ThrowIfThisIsNew();
+            var item = new SuppressReadReceipt(this);
+            await item.InternalCreateAsync(null, null);
         }
 
         #region Properties

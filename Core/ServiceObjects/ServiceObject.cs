@@ -291,12 +291,30 @@ namespace Microsoft.Exchange.WebServices.Data
         internal abstract void InternalLoad(PropertySet propertySet);
 
         /// <summary>
+        /// Loads async the specified set of properties on the object.
+        /// </summary>
+        /// <param name="propertySet">The properties to load.</param>
+        internal abstract System.Threading.Tasks.Task InternalLoadAsync(PropertySet propertySet);
+
+
+        /// <summary>
         /// Deletes the object.
         /// </summary>
         /// <param name="deleteMode">The deletion mode.</param>
         /// <param name="sendCancellationsMode">Indicates whether meeting cancellation messages should be sent.</param>
         /// <param name="affectedTaskOccurrences">Indicate which occurrence of a recurring task should be deleted.</param>
         internal abstract void InternalDelete(
+            DeleteMode deleteMode,
+            SendCancellationsMode? sendCancellationsMode,
+            AffectedTaskOccurrence? affectedTaskOccurrences);
+
+        /// <summary>
+        /// Deletes async the object.
+        /// </summary>
+        /// <param name="deleteMode">The deletion mode.</param>
+        /// <param name="sendCancellationsMode">Indicates whether meeting cancellation messages should be sent.</param>
+        /// <param name="affectedTaskOccurrences">Indicate which occurrence of a recurring task should be deleted.</param>
+        internal abstract System.Threading.Tasks.Task InternalDeleteAsync(
             DeleteMode deleteMode,
             SendCancellationsMode? sendCancellationsMode,
             AffectedTaskOccurrence? affectedTaskOccurrences);

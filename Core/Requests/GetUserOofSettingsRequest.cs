@@ -133,6 +133,20 @@ namespace Microsoft.Exchange.WebServices.Data
         }
 
         /// <summary>
+        /// Executes this request asynchronously.
+        /// </summary>
+        /// <returns>Service response.</returns>
+        internal async System.Threading.Tasks.Task<GetUserOofSettingsResponse> ExecuteAsync()
+        {
+            GetUserOofSettingsResponse serviceResponse = await this.InternalExecuteAsync<GetUserOofSettingsResponse>();
+
+            serviceResponse.ThrowIfNecessary();
+
+            return serviceResponse;
+        }
+
+
+        /// <summary>
         /// Gets or sets the SMTP address.
         /// </summary>
         internal string SmtpAddress

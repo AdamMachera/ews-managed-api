@@ -341,6 +341,73 @@ namespace Microsoft.Exchange.WebServices.Data
         }
 
         /// <summary>
+        /// Saves this collection by creating new attachment and deleting removed ones.
+        /// </summary>
+        internal async System.Threading.Tasks.Task SaveAsync()
+        {
+            List<Attachment> attachments = new List<Attachment>();
+
+            // Retrieve a list of attachments that have to be deleted.
+            foreach (Attachment attachment in this.RemovedItems)
+            {
+                if (!attachment.IsNew)
+                {
+                    attachments.Add(attachment);
+                }
+            }
+
+            // If any, delete them by calling the DeleteAttachment web method.
+            if (attachments.Count > 0)
+            {
+                await this.InternalDeleteAttachmentsAsync(attachments);
+            }
+
+            attachments.Clear();
+
+            // Retrieve a list of attachments that have to be created.
+            foreach (Attachment attachment in this)
+            {
+                if (attachment.IsNew)
+                {
+                    attachments.Add(attachment);
+                }
+            }
+
+            // If there are any, create them by calling the CreateAttachment web method.
+            if (attachments.Count > 0)
+            {
+                if (this.owner.IsAttachment)
+                {
+                    await this.InternalCreateAttachmentsAsync(this.owner.ParentAttachment.Id, attachments);
+                }
+                else
+                {
+                    await this.InternalCreateAttachmentsAsync(this.owner.Id.UniqueId, attachments);
+                }
+            }
+
+            // Process all of the item attachments in this collection.
+            foreach (Attachment attachment in this)
+            {
+                ItemAttachment itemAttachment = attachment as ItemAttachment;
+                if (itemAttachment != null)
+                {
+                    // Make sure item was created/loaded before trying to create/delete sub-attachments
+                    if (itemAttachment.Item != null)
+                    {
+                        // Create/delete any sub-attachments
+                        await itemAttachment.Item.Attachments.SaveAsync();
+
+                        // Clear the item's change log
+                        itemAttachment.Item.ClearChangeLog();
+                    }
+                }
+            }
+
+            base.ClearChangeLog();
+        }
+
+        /// <summary>
         /// Determines whether there are any unsaved attachment collection changes.
         /// </summary>
         /// <returns>True if attachment adds or deletes haven't been processed yet.</returns>
@@ -456,6 +523,31 @@ namespace Microsoft.Exchange.WebServices.Data
         }
 
         /// <summary>
+        /// Calls the DeleteAttachment web method to delete a list of attachments.
+        /// </summary>
+        /// <param name="attachments">The attachments to delete.</param>
+        private async System.Threading.Tasks.Task InternalDeleteAttachmentsAsync(IEnumerable<Attachment> attachments)
+        {
+            ServiceResponseCollection<DeleteAttachmentResponse> responses = await this.owner.Service.DeleteAttachmentsAsync(attachments);
+
+            foreach (DeleteAttachmentResponse response in responses)
+            {
+                // We remove all attachments that were successfully deleted from the change log. We should never
+                // receive a warning from EWS, so we ignore them.
+                if (response.Result != ServiceResult.Error)
+                {
+                    this.RemoveFromChangeLog(response.Attachment);
+                }
+            }
+
+            // TODO : Should we throw for warnings as well?
+            if (responses.OverallResult == ServiceResult.Error)
+            {
+                throw new DeleteAttachmentException(responses, Strings.AtLeastOneAttachmentCouldNotBeDeleted);
+            }
+        }
+
+        /// <summary>
         /// Calls the CreateAttachment web method to create a list of attachments.
         /// </summary>
         /// <param name="parentItemId">The Id of the parent item of the new attachments.</param>
@@ -463,6 +555,32 @@ namespace Microsoft.Exchange.WebServices.Data
         private void InternalCreateAttachments(string parentItemId, IEnumerable<Attachment> attachments)
         {
             ServiceResponseCollection<CreateAttachmentResponse> responses = this.owner.Service.CreateAttachments(parentItemId, attachments);
+
+            foreach (CreateAttachmentResponse response in responses)
+            {
+                // We remove all attachments that were successfully created from the change log. We should never
+                // receive a warning from EWS, so we ignore them.
+                if (response.Result != ServiceResult.Error)
+                {
+                    this.RemoveFromChangeLog(response.Attachment);
+                }
+            }
+
+            // TODO : Should we throw for warnings as well?
+            if (responses.OverallResult == ServiceResult.Error)
+            {
+                throw new CreateAttachmentException(responses, Strings.AttachmentCreationFailed);
+            }
+        }
+
+        /// <summary>
+        /// Calls the CreateAttachment web method to create a list of attachments.
+        /// </summary>
+        /// <param name="parentItemId">The Id of the parent item of the new attachments.</param>
+        /// <param name="attachments">The attachments to create.</param>
+        private async System.Threading.Tasks.Task InternalCreateAttachmentsAsync(string parentItemId, IEnumerable<Attachment> attachments)
+        {
+            ServiceResponseCollection<CreateAttachmentResponse> responses = await this.owner.Service.CreateAttachmentsAsync(parentItemId, attachments);
 
             foreach (CreateAttachmentResponse response in responses)
             {
