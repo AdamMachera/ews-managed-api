@@ -57,6 +57,18 @@ namespace Microsoft.Exchange.WebServices.Data
         {
         }
 
+
+        /// <summary>
+        /// Initializes a new instance of the <see cref="ItemAttachment" /> class.
+        /// </summary>
+        /// <param name="service">The service.</param>
+        /// <param name="itemId">The item identifier.</param>
+        public ItemAttachment(ExchangeService service, string itemId)
+            : base(service)
+        {
+            this.Id = itemId;
+        }
+
         /// <summary>
         /// Gets the item associated with the attachment.
         /// </summary>
